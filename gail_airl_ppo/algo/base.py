@@ -17,16 +17,17 @@ class Algorithm(ABC):
         self.device = device
         self.gamma = gamma
 
-    def explore(self, state):
+    def explore(self, state, action_discrete=False):
         state = torch.tensor(state, dtype=torch.float, device=self.device)
         with torch.no_grad():
-            action, log_pi = self.actor.sample(state.unsqueeze_(0))
+            # action.shape = torch.Size([1, 1]), log_pi.shape = torch.Size([1, 1])
+            action, log_pi = self.actor.sample(state.unsqueeze_(0), action_discrete=action_discrete)
         return action.cpu().numpy()[0], log_pi.item()
 
-    def exploit(self, state):
+    def exploit(self, state, action_discrete=False):
         state = torch.tensor(state, dtype=torch.float, device=self.device)
         with torch.no_grad():
-            action = self.actor(state.unsqueeze_(0))
+            action = self.actor(state.unsqueeze_(0), action_discrete=action_discrete)
         return action.cpu().numpy()[0]
 
     @abstractmethod

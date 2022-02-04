@@ -13,9 +13,17 @@ class NormalizedEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         self._max_episode_steps = env._max_episode_steps
 
-        self.scale = env.action_space.high
-        self.action_space.high /= self.scale
-        self.action_space.low /= self.scale
+        if hasattr(env.action_space, 'high'):
+            self.scale = env.action_space.high
+            self.action_space.high /= self.scale
+            self.action_space.low /= self.scale
+            self.action_discrete = False
+        else:
+            self.action_discrete = True
+            self.scale = 1
 
     def step(self, action):
-        return self.env.step(action * self.scale)
+        if self.action_discrete:
+            return self.env.step(int(action.item()))
+        else:
+            return self.env.step(action * self.scale)

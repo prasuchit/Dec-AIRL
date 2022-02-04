@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 class Trainer:
 
     def __init__(self, env, env_test, algo, log_dir, seed=0, num_steps=10**5,
-                 eval_interval=10**3, num_eval_episodes=5):
+                 eval_interval=10**3, num_eval_episodes=5, action_discrete=False):
         super().__init__()
 
         # Env to collect samples.
@@ -32,6 +32,7 @@ class Trainer:
         self.num_steps = num_steps
         self.eval_interval = eval_interval
         self.num_eval_episodes = num_eval_episodes
+        self.action_discrete = action_discrete
 
     def train(self):
         # Time to start training.
@@ -56,7 +57,7 @@ class Trainer:
                     os.path.join(self.model_dir, f'step{step}'))
 
         # Wait for the logging to be finished.
-        sleep(10)
+        # sleep(10)
 
     def evaluate(self, step):
         mean_return = 0.0
@@ -67,7 +68,7 @@ class Trainer:
             done = False
 
             while (not done):
-                action = self.algo.exploit(state)
+                action = self.algo.exploit(state, action_discrete=self.action_discrete)
                 state, reward, done, _ = self.env_test.step(action)
                 episode_return += reward
 

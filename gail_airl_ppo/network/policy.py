@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.distributions import Categorical
 
 from .utils import build_mlp, reparameterize, evaluate_lop_pi
 
@@ -18,14 +19,36 @@ class StateIndependentPolicy(nn.Module):
         )
         self.log_stds = nn.Parameter(torch.zeros(1, action_shape[0]))
 
-    def forward(self, states):
-        return torch.tanh(self.net(states))
+    def forward(self, states, action_discrete=False):
+        if action_discrete:
+            actions = torch.argmax(self.net(states)).item()
+            return torch.tensor([[actions]]).float()
+        else:
+            return torch.tanh(self.net(states))
 
-    def sample(self, states):
-        return reparameterize(self.net(states), self.log_stds)
+    def sample(self, states, action_discrete=False):
+        if action_discrete:
+            output = self.net(states)
+            actions = torch.argmax(output).item()
+            # dist = Categorical(torch.nn.functional.softmax(output))
+            # actions = dist.sample()
+            log_pi = torch.nn.functional.log_softmax(output)[0][actions]
+            # log_pi = dist.log_prob(actions)
+            return torch.tensor([[actions]]).float(), torch.tensor([[log_pi]]).float()
+        else:
+            return reparameterize(self.net(states), self.log_stds)
 
-    def evaluate_log_pi(self, states, actions):
-        return evaluate_lop_pi(self.net(states), self.log_stds, actions)
+    def evaluate_log_pi(self, states, actions, action_discrete=False):
+        if action_discrete:
+            logits = self.net(states)
+            pis = torch.nn.functional.softmax(logits)
+            log_pis = torch.nn.functional.log_softmax(logits)
+            entropy = -(pis * log_pis).mean()
+            actions = torch.argmax(logits, dim=1)
+            log_pi = log_pis.gather(1, actions.view(-1, 1).long())
+            return log_pi, entropy
+        else:
+            return evaluate_lop_pi(self.net(states), self.log_stds, actions), torch.tensor(0)
 
 
 class StateDependentPolicy(nn.Module):
