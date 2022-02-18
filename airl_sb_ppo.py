@@ -209,7 +209,7 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
-    p.add_argument('--env_id', type=str, default='Hopper-v3')
+    p.add_argument('--env_id', type=str, default='CartPole-v1')
     p.add_argument('--cuda', action='store_true')
     p.add_argument('--seed', type=int, default=1)
     args = p.parse_args()
@@ -218,6 +218,6 @@ if __name__ == '__main__':
     device = 'cuda:0' if args.cuda else 'cpu'
     print(f'Using {device}')
 
-    buffer_exp = torch.load(f'../../buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
+    buffer_exp = torch.load(f'buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
     airl = AIRL(env_id=env_id, buffer_exp=buffer_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
     airl.train(args.num_steps)
