@@ -1,3 +1,4 @@
+import os
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -217,7 +218,7 @@ if __name__ == '__main__':
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
     print(f'Using {device}')
-
-    buffer_exp = torch.load(f'../../buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
+    script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
+    buffer_exp = torch.load(script_dir + f'/buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
     airl = AIRL(env_id=env_id, buffer_exp=buffer_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
     airl.train(args.num_steps)

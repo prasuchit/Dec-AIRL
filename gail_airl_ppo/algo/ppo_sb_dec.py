@@ -759,18 +759,19 @@ class Train(object):
 
     def airl(self, airl_epochs=1000, n_steps=2048, batch_size=64, n_epochs=10, eval_interval=5, eval_epochs=10):
         print("AIRL RL")
+        script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
         now = datetime.now()
         timestamp = now.strftime("%m-%d-%Y-%H-%M")
         # self.path = f'models/{timestamp}'
-        self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models/{timestamp}'
+        self.path = script_dir + f'/models/{timestamp}'
         os.mkdir(self.path)
 
         model_r = PPO_Dec(ActorCriticPolicy_Dec, self.env, verbose=1, airl=True, device=self.device, seed=self.seed)
-        model_r.set_parameters(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models/04-12-2022-10-51/model_r_95.zip', device=self.device)
+        model_r.set_parameters(script_dir + f'/models/04-12-2022-10-51/model_r_95.zip', device=self.device)
         self.model_r = model_r
 
         model_h = PPO_Dec(ActorCriticPolicy_Dec, self.env, verbose=1, airl=True, device=self.device, seed=self.seed)
-        model_h.set_parameters(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models/04-12-2022-10-51/model_h_95.zip', device=self.device)
+        model_h.set_parameters(script_dir + f'/models/04-12-2022-10-51/model_h_95.zip', device=self.device)
         self.model_h = model_h
 
         state = self.env.reset(self.fixed_init) # [state of robot, state of human]

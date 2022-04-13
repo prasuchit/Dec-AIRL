@@ -10,3 +10,4 @@ run.sh
 /gail_airl_ppo/algo/buffers/*
 *.pkl
 *.zip
+weights/*

@@ -12,7 +12,6 @@ import numpy as np
 
 from datetime import datetime
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
-
 sys.path.append(os.getcwd()+f'/gail-airl-ppo/')
 from gail_airl_ppo.algo.ppo_sb_dec import PPO_Dec, ActorCriticPolicy_Dec
 from gail_airl_ppo.network.disc import AIRLDiscrimAction
@@ -33,15 +32,6 @@ class AIRL(object):
             self.state_shape = self.env.observation_space.shape
         else:
             raise ValueError('Cannot recognize env observation space ')
-
-        # if self.env.action_space.__class__.__name__ == 'Discrete':
-            # self.action_shape = (self.env.action_space.n,)
-            # self.discrete_action = True
-        # elif self.env.action_space.__class__.__name__ == 'Box':
-            # self.action_shape = self.env.action_space.shape
-            # self.discrete_action = False
-        # else:
-            # raise ValueError('Cannot recognize env action space')
 
         # Discriminator.
         self.disc = AIRLDiscrimAction(
@@ -74,6 +64,7 @@ class AIRL(object):
 
         self.buffer_r_exp = buffer_r_exp
         self.buffer_h_exp = buffer_h_exp
+
 
         self.buffer_r = {
             'state': torch.zeros(size=(n_steps, self.state_shape[0]), device=device),
@@ -109,6 +100,11 @@ class AIRL(object):
         self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/{timestamp}'
 
         self.best_reward = -100
+        try:
+            os.mkdir(self.path)
+            # print("New airl model folder created at: ", self.path)
+        except FileExistsError:
+            print("FileExistsError Exception!")
 
     def train(self, total_timesteps=100000):
         state = self.env.reset()
@@ -157,10 +153,6 @@ class AIRL(object):
                 print(f'Timesteps: {airl_step} | ', end='')
                 eval_reward = self.evaluate()
                 if eval_reward > self.best_reward:
-                    try:
-                        os.mkdir(self.path)
-                    except FileExistsError:
-                        pass
                     torch.save(self.disc.state_dict(), f'{self.path}/disc_{airl_step}_{int(eval_reward)}.pt')
                     self.actor_r.save(f'{self.path}/actor_r_{airl_step}_{int(eval_reward)}')
                     self.actor_h.save(f'{self.path}/actor_h_{airl_step}_{int(eval_reward)}')
@@ -311,11 +303,11 @@ class AIRL(object):
         rewards = self.disc.calculate_reward(
             states, dones, log_probs[:, None], next_states, global_actions).squeeze()
 
-        self.actor_r.learn(total_timesteps=10000000, states_rollout=states_r.cpu().numpy(), next_states_rollout=next_states_r.cpu().numpy(),
+        self.actor_r.learn(total_timesteps=1000000, states_rollout=states_r.cpu().numpy(), next_states_rollout=next_states_r.cpu().numpy(),
                          actions_rollout=actions_r.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_r.cpu().numpy(),
                          values_rollout=values_r, log_probs_rollout=log_probs_r, infos_rollout=infos_r)
         
-        self.actor_h.learn(total_timesteps=10000000, states_rollout=states_h.cpu().numpy(), next_states_rollout=next_states_h.cpu().numpy(),
+        self.actor_h.learn(total_timesteps=1000000, states_rollout=states_h.cpu().numpy(), next_states_rollout=next_states_h.cpu().numpy(),
                          actions_rollout=actions_h.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_h.cpu().numpy(),
                          values_rollout=values_h, log_probs_rollout=log_probs_h, infos_rollout=infos_h)
 
@@ -400,5 +392,5 @@ if __name__ == '__main__':
     }
 
     airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
-    # airl.train(args.num_steps)
-    airl.test(path=os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-12-2022-11-43/', load_best=True)
+    airl.train(args.num_steps)
+    # airl.test(path=os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-12-2022-11-43/', load_best=True)
