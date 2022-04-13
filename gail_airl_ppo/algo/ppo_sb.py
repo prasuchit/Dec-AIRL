@@ -646,8 +646,16 @@ class Train(object):
 
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     env_id = 'ma_gym:HuRoSorting-v0'
     # airl = Train(env_id, th.device('cpu'))
     # airl.airl(airl_epochs=500)
     rl = Train(env_id, th.device('cpu'))
     rl.forward_rl(total_timesteps=2500000)
+=======
+    env_id = 'LunarLander-v2'
+    airl = Train(env_id, th.device('cpu'))
+    airl.airl(airl_epochs=500)
+    # rl = Train(env_id, th.device('cpu'))
+    # rl.forward_rl(total_timesteps=250000)
+>>>>>>> 2bc46b5c733b5422518582cf498f39a125f8a33a

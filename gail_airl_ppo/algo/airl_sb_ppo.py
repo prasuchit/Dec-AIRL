@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 import os
+=======
+>>>>>>> 2bc46b5c733b5422518582cf498f39a125f8a33a
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -31,6 +34,7 @@ class AIRL(object):
         else:
             raise ValueError('Cannot recognize env observation space ')
 
+<<<<<<< HEAD
         # if self.env.action_space.__class__.__name__ == 'Discrete':
             # self.action_shape = (self.env.action_space.n,)
             # self.discrete_action = True
@@ -39,6 +43,16 @@ class AIRL(object):
             # self.discrete_action = False
         # else:
             # raise ValueError('Cannot recognize env action space')
+=======
+        if self.env.action_space.__class__.__name__ == 'Discrete':
+            self.action_shape = (self.env.action_space.n,)
+            self.discrete_action = True
+        elif self.env.action_space.__class__.__name__ == 'Box':
+            self.action_shape = self.env.action_space.shape
+            self.discrete_action = False
+        else:
+            raise ValueError('Cannot recognize env action space')
+>>>>>>> 2bc46b5c733b5422518582cf498f39a125f8a33a
 
         # Discriminator.
         self.disc = AIRLDiscrim(
@@ -218,7 +232,12 @@ if __name__ == '__main__':
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
     print(f'Using {device}')
+<<<<<<< HEAD
     script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
     buffer_exp = torch.load(script_dir + f'/buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
+=======
+
+    buffer_exp = torch.load(f'../../buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
+>>>>>>> 2bc46b5c733b5422518582cf498f39a125f8a33a
     airl = AIRL(env_id=env_id, buffer_exp=buffer_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
     airl.train(args.num_steps)
