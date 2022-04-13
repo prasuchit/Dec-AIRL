@@ -21,13 +21,17 @@ class Algorithm(ABC):
         state = torch.tensor(state, dtype=torch.float, device=self.device)
         with torch.no_grad():
             # action.shape = torch.Size([1, 1]), log_pi.shape = torch.Size([1, 1])
-            action, log_pi = self.actor.sample(state.unsqueeze_(0), action_discrete=action_discrete)
+            if action_discrete:
+                action, log_pi = self.actor.sample(state.unsqueeze_(0), action_discrete=action_discrete)
+            else: action, log_pi = self.actor.sample(state.unsqueeze_(0))
         return action.cpu().numpy()[0], log_pi.item()
 
     def exploit(self, state, action_discrete=False):
         state = torch.tensor(state, dtype=torch.float, device=self.device)
         with torch.no_grad():
-            action = self.actor(state.unsqueeze_(0), action_discrete=action_discrete)
+            if action_discrete:
+                action = self.actor(state.unsqueeze_(0), action_discrete=action_discrete)
+            else: action = self.actor(state.unsqueeze_(0))
         return action.cpu().numpy()[0]
 
     @abstractmethod

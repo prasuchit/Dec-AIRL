@@ -68,7 +68,9 @@ class Trainer:
             done = False
 
             while (not done):
-                action = self.algo.exploit(state, action_discrete=self.action_discrete)
+                if self.action_discrete:
+                    action = self.algo.exploit(state, action_discrete=self.action_discrete)
+                else: action = self.algo.exploit(state)
                 state, reward, done, _ = self.env_test.step(action)
                 episode_return += reward
 

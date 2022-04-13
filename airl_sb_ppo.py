@@ -1,3 +1,4 @@
+import os
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -30,9 +31,15 @@ class AIRL(object):
         else:
             raise ValueError('Cannot recognize env observation space ')
 
-        # if self.env.action_space.__class__.__name__ == 'Discrete':
+        if self.env.action_space.__class__.__name__ == 'Discrete':
             # self.action_shape = (self.env.action_space.n,)
-            # self.discrete_action = True
+            self.discrete_action = True
+        else:
+            self.discrete_action = False
+            self.action_shape = self.env.action_space.shape
+        # elif self.env.action_space.__class__.__name__ == 'MultiDiscrete':
+        #     self.action_shape = self.env.action_space.shape
+        #     self.discrete_action = True
         # elif self.env.action_space.__class__.__name__ == 'Box':
             # self.action_shape = self.env.action_space.shape
             # self.discrete_action = False
@@ -62,17 +69,29 @@ class AIRL(object):
         self.learning_steps_disc = 0
         self.device = device
         self.eval_interval = eval_interval
-
-        self.buffer = {
-            'state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
-            'action': torch.zeros(n_steps, device=device),
-            'next_state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
-            'reward': torch.zeros(n_steps, device=device),
-            'done': torch.zeros(size=(n_steps, 1), device=device),
-            'value': torch.zeros(n_steps, device=device),
-            'log_prob': torch.zeros(n_steps, device=device),
-            'info': [[{}]] * n_steps
-        }
+        
+        if self.discrete_action:
+            self.buffer = {
+                'state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
+                'action': torch.zeros(n_steps, device=device),
+                'next_state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
+                'reward': torch.zeros(n_steps, device=device),
+                'done': torch.zeros(size=(n_steps, 1), device=device),
+                'value': torch.zeros(n_steps, device=device),
+                'log_prob': torch.zeros(n_steps, device=device),
+                'info': [[{}]] * n_steps
+            }
+        else:
+            self.buffer = {
+                'state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
+                'action': torch.zeros(size=(n_steps, self.action_shape[0]), device=device),
+                'next_state': torch.zeros(size=(n_steps, 1, self.state_shape[0]), device=device),
+                'reward': torch.zeros(n_steps, device=device),
+                'done': torch.zeros(size=(n_steps, 1), device=device),
+                'value': torch.zeros(n_steps, device=device),
+                'log_prob': torch.zeros(n_steps, device=device),
+                'info': [[{}]] * n_steps
+            }
         self.buffer_size = n_steps
         self.buffer_p = 0
         self.buffer_record = 0
@@ -82,6 +101,7 @@ class AIRL(object):
         for airl_step in range(1, total_timesteps):
             with torch.no_grad():
                 action, value, log_prob = self.actor.policy.forward(obs_as_tensor(state, self.device))
+                # print(action)
             actions = action.cpu().numpy()
 
             if isinstance(self.env.action_space, gym.spaces.Box):
@@ -93,7 +113,8 @@ class AIRL(object):
 
             if self.env.action_space.__class__.__name__ == 'Discrete':
                 action = [action]
-
+            
+            # print(log_prob)
             self.buffer_add(state, action, next_state, reward, done, value, log_prob, info)
 
             if done:
@@ -209,7 +230,7 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
-    p.add_argument('--env_id', type=str, default='Hopper-v3')
+    p.add_argument('--env_id', type=str, default='ma_gym:HuRoSorting-v0')
     p.add_argument('--cuda', action='store_true')
     p.add_argument('--seed', type=int, default=1)
     args = p.parse_args()
@@ -218,6 +239,6 @@ if __name__ == '__main__':
     device = 'cuda:0' if args.cuda else 'cpu'
     print(f'Using {device}')
 
-    buffer_exp = torch.load(f'../../buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
+    buffer_exp = torch.load(os.getcwd()+ f'/gail-airl-ppo/buffers/ppo_sb/{env_id.split("-")[0].lower()}.pt')
     airl = AIRL(env_id=env_id, buffer_exp=buffer_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
     airl.train(args.num_steps)

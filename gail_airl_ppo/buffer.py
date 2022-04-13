@@ -105,8 +105,7 @@ class RolloutBuffer:
         assert self._p % self.buffer_size == 0
         start = (self._p - self.buffer_size) % self.total_size
         assert start == 0
-        idxes = torch.randperm(self.buffer_size)
-        # idxes = slice(start, start + self.buffer_size)
+        idxes = slice(start, start + self.buffer_size)
         return (
             self.states[idxes],
             self.actions[idxes],

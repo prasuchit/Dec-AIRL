@@ -5,3 +5,8 @@ buffers/
 *.log
 *.out
 run.sh
+/gail_airl_ppo/algo/models/*
+/gail_airl_ppo/algo/models_airl/*
+/gail_airl_ppo/algo/buffers/*
+*.pkl
+*.zip
