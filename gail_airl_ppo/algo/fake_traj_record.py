@@ -6,6 +6,8 @@ import torch
 from tqdm import tqdm
 import numpy as np
 import os
+import random
+from time import time
 
 env_id = 'ma_gym:HuRoSorting-v0'
 
@@ -14,6 +16,7 @@ env = gym.make(env_id)
 total_timesteps = 10 ** 5
 
 init_fixed = False
+failure_traj = False
 done = False
 state = env.reset(init_fixed)
 state_robot = state[:11].copy()
@@ -78,7 +81,13 @@ ep_length = 0
 actions_r = None
 actions_h = None
 
-state = env.reset(init_fixed)
+if not failure_traj:
+    state = env.reset(init_fixed)
+else:
+    random.seed(time())
+    # loc_st = random.choice([])
+    # state = 
+    raise NotImplementedError
 
 for _ in tqdm(range(total_timesteps)):
     state_robot = state[:11].copy()
@@ -117,15 +126,26 @@ for _ in tqdm(range(total_timesteps)):
     
     # Interaction states
     ###### JOINT ACTIONS ######
-    if oloc_r == pred_r == oloc_h == pred_h == 0:   # Both unknown
-        actions_r = torch.tensor(0) # Noop
-        actions_h = torch.tensor(1) # Detect
-    elif oloc_r == oloc_h == 1 and (pred_r != 0 and pred_h != 0) and (eefloc_r != 1 and eefloc_h != 1): # Both onion on conv
-        actions_r = torch.tensor(0) # Noop
-        actions_h = torch.tensor(2) # Pick
-    elif oloc_r == eefloc_r == oloc_h == eefloc_h == 2 and (pred_r == pred_h == 2): # Both infront, good
-        actions_r = torch.tensor(0) # Noop
-        actions_h = torch.tensor(4) # Placeonconv
+    if not failure_traj:
+        if oloc_r == pred_r == oloc_h == pred_h == 0:   # Both unknown
+            actions_r = torch.tensor(0) # Noop
+            actions_h = torch.tensor(1) # Detect
+        elif oloc_r == oloc_h == 1 and (pred_r != 0 and pred_h != 0) and (eefloc_r != 1 and eefloc_h != 1): # Both onion on conv
+            actions_r = torch.tensor(0) # Noop
+            actions_h = torch.tensor(2) # Pick
+        elif oloc_r == eefloc_r == oloc_h == eefloc_h == 2 and (pred_r == pred_h == 2): # Both infront, good
+            actions_r = torch.tensor(0) # Noop
+            actions_h = torch.tensor(4) # Placeonconv
+    else:
+        if oloc_r == pred_r == oloc_h == pred_h == 0:   # Both unknown
+            actions_r = torch.tensor(1) # Detect
+            actions_h = torch.tensor(1) # Detect
+        elif oloc_r == oloc_h == 1 and (pred_r != 0 and pred_h != 0) and (eefloc_r != 1 and eefloc_h != 1): # Both onion on conv
+            actions_r = torch.tensor(2) # Pick
+            actions_h = torch.tensor(2) # Pick
+        elif oloc_r == eefloc_r == oloc_h == eefloc_h == 2 and (pred_r == pred_h == 2): # Both infront, good
+            actions_r = torch.tensor(4) # Placeonconv
+            actions_h = torch.tensor(4) # Placeonconv
 
     assert actions_r != None, f"Check the exception oloc_r: {OLOC[oloc_r]}, eefloc_r: {EEFLOC[eefloc_r]}, pred_r: {PRED[pred_r]}, actions_r: {ACTIONS[actions_r]}"
     assert actions_h != None, f"Check the exception oloc_h: {OLOC[oloc_h]}, eefloc_r: {EEFLOC[eefloc_h]}, pred_r: {PRED[pred_h]}, actions_h: {ACTIONS[actions_h]}"

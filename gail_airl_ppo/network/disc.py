@@ -64,7 +64,6 @@ class AIRLDiscrim(nn.Module):
     def calculate_reward(self, states, dones, log_pis, next_states):
         with torch.no_grad():
             logits = self.forward(states, dones[None, :], log_pis, next_states)
-<<<<<<< HEAD
             return -F.logsigmoid(-logits)
 
 
@@ -106,6 +105,4 @@ class AIRLDiscrimAction(nn.Module):
     def calculate_reward(self, states, dones, log_pis, next_states, actions):
         with torch.no_grad():
             logits = self.forward(states, dones, log_pis, next_states, actions)
-=======
->>>>>>> 2bc46b5c733b5422518582cf498f39a125f8a33a
             return -F.logsigmoid(-logits)

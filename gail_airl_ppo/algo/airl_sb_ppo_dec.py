@@ -18,7 +18,7 @@ from gail_airl_ppo.network.disc import AIRLDiscrimAction
 
 
 class AIRL(object):
-    def __init__(self, env_id, buffer_r_exp, buffer_h_exp, device, seed, eval_interval=500,
+    def __init__(self, env_id, buffer_r_exp, buffer_h_exp, device, seed, load_existing, trainpath, eval_interval=500,
                  gamma=0.95, n_steps=2048,
                  batch_size=128, lr_actor=3e-4, lr_disc=3e-4,
                  units_disc_r=(64, 64), units_disc_v=(64, 64),
@@ -33,6 +33,7 @@ class AIRL(object):
         else:
             raise ValueError('Cannot recognize env observation space ')
 
+
         # Discriminator.
         self.disc = AIRLDiscrimAction(
             state_shape=self.state_shape,
@@ -45,12 +46,14 @@ class AIRL(object):
         ).to(device)
 
         self.actor_r = PPO_Dec(ActorCriticPolicy_Dec, self.env, verbose=0, n_steps=n_steps, seed=seed, device=device, learning_rate=lr_actor,
-                              n_epochs=epoch_actor, max_grad_norm=max_grad_norm, clip_range=clip_eps,
-                              gae_lambda=gae_lambda, ent_coef=ent_coef, airl=True, _init_setup_model=True)
+                            n_epochs=epoch_actor, max_grad_norm=max_grad_norm, clip_range=clip_eps,
+                            gae_lambda=gae_lambda, ent_coef=ent_coef, airl=True, _init_setup_model=True)
 
         self.actor_h = PPO_Dec(ActorCriticPolicy_Dec, self.env, verbose=0, n_steps=n_steps, seed=seed, device=device, learning_rate=lr_actor,
-                              n_epochs=epoch_actor, max_grad_norm=max_grad_norm, clip_range=clip_eps,
-                              gae_lambda=gae_lambda, ent_coef=ent_coef, airl=True, _init_setup_model=True)
+                            n_epochs=epoch_actor, max_grad_norm=max_grad_norm, clip_range=clip_eps,
+                            gae_lambda=gae_lambda, ent_coef=ent_coef, airl=True, _init_setup_model=True)
+
+        self.load_models(load_existing, trainpath)
 
         self.optim_disc = Adam(self.disc.parameters(), lr=lr_disc)
         self.batch_size = batch_size
@@ -64,6 +67,8 @@ class AIRL(object):
 
         self.buffer_r_exp = buffer_r_exp
         self.buffer_h_exp = buffer_h_exp
+
+        self.path = None
 
 
         self.buffer_r = {
@@ -94,19 +99,15 @@ class AIRL(object):
 
         self.buffer_size = n_steps
 
-        now = datetime.now()
-        timestamp = now.strftime("%m-%d-%Y-%H-%M")
-        # self.path = f'models/{timestamp}'
-        self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/{timestamp}'
+    def load_models(self, trainpath, load_existing=False):        
 
-        self.best_reward = -100
-        try:
-            os.mkdir(self.path)
-            # print("New airl model folder created at: ", self.path)
-        except FileExistsError:
-            print("FileExistsError Exception!")
+        if load_existing:
+            actor_r, actor_h, disc = self.best_loader(trainpath)
+            self.disc.load_state_dict(torch.load(f'{trainpath}/{disc}'))
+            self.actor_r.set_parameters(f'{trainpath}/{actor_r}',  device=self.device)
+            self.actor_h.set_parameters(f'{trainpath}/{actor_h}', device=self.device)
 
-    def train(self, total_timesteps=100000):
+    def train(self, total_timesteps=100000, failure_traj = False):
         state = self.env.reset()
         state_robot = state[:11].copy()
         state_human = state[11:].copy()
@@ -147,12 +148,24 @@ class AIRL(object):
 
             if airl_step % self.n_steps == 0:
                 # assert self.buffer_p == 0
-                self.update()
+                self.update(failure_traj)
 
             if airl_step % self.eval_interval == 0:
                 print(f'Timesteps: {airl_step} | ', end='')
                 eval_reward = self.evaluate()
                 if eval_reward > self.best_reward:
+                    
+                    now = datetime.now()
+                    timestamp = now.strftime("%m-%d-%Y-%H-%M")
+                    self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/{timestamp}'
+
+                    self.best_reward = -100
+                    try:
+                        os.mkdir(self.path)
+                        # print("New airl model folder created at: ", self.path)
+                    except FileExistsError:
+                        print("FileExistsError Exception!")
+
                     torch.save(self.disc.state_dict(), f'{self.path}/disc_{airl_step}_{int(eval_reward)}.pt')
                     self.actor_r.save(f'{self.path}/actor_r_{airl_step}_{int(eval_reward)}')
                     self.actor_h.save(f'{self.path}/actor_h_{airl_step}_{int(eval_reward)}')
@@ -192,24 +205,135 @@ class AIRL(object):
             f'mean length: {round(np.mean(ep_lengths), 1)} | mean reward: {round(np.mean(ep_rewards), 1)}')
         return np.mean(ep_rewards)
     
+
+    def update(self, failure_traj = False):
+        for _ in range(self.epoch_disc):
+            self.learning_steps_disc += 1
+            states_r_policy, action_r_policy, next_states_r_policy, _, dones_r_policy, _, log_probs_r_policy = self.buffer_sample(self.buffer_r, expert=False)
+            states_h_policy, action_h_policy, next_states_h_policy, _, dones_h_policy, _, log_probs_h_policy = self.buffer_sample(self.buffer_h, expert=False)
+            states_r_exp, action_r_exp, next_states_r_exp, _, dones_r_exp = self.buffer_sample(self.buffer_r_exp, expert=True)
+            states_h_exp, action_h_exp, next_states_h_exp, _, dones_h_exp = self.buffer_sample(self.buffer_h_exp, expert=True)
+            with torch.no_grad():
+                _, log_probs_r_exp, _ = self.actor_r.policy.evaluate_actions(states_r_exp, action_r_exp)
+                _, log_probs_h_exp, _ = self.actor_h.policy.evaluate_actions(states_h_exp, action_h_exp)
+            action_r_policy_onehot = torch.nn.functional.one_hot(action_r_policy.long(), num_classes=6).float()
+            action_h_policy_onehot = torch.nn.functional.one_hot(action_h_policy.long(), num_classes=6).float()
+            global_actions_policy = torch.cat((action_r_policy_onehot, action_h_policy_onehot), dim=1)
+
+            action_r_exp_onehot = torch.nn.functional.one_hot(action_r_exp.long(), num_classes=6).float()
+            action_h_exp_onehot = torch.nn.functional.one_hot(action_h_exp.long(), num_classes=6).float()
+            global_actions_exp = torch.cat((action_r_exp_onehot, action_h_exp_onehot), dim=1)
+
+            states_policy = states_r_policy.clone()
+            dones_policy = dones_r_policy.clone()
+            log_probs_policy = log_probs_r_policy + log_probs_h_policy
+            next_states_policy = next_states_r_policy.clone()
+
+            states_exp = states_r_exp.clone()
+            dones_exp = dones_r_exp.clone()
+            log_probs_exp = log_probs_r_exp + log_probs_h_exp
+            next_states_exp = next_states_r_exp.clone()
+
+            self.update_disc(
+                states_policy, global_actions_policy, dones_policy, log_probs_policy, next_states_policy, 
+                states_exp, global_actions_exp, dones_exp, log_probs_exp, next_states_exp, failure_traj
+            )
+
+        states_r, actions_r, next_states_r, _, dones_r, values_r, log_probs_r, infos_r = self.buffer_get(self.buffer_r)
+        states_h, actions_h, next_states_h, _, dones_h, values_h, log_probs_h, infos_h = self.buffer_get(self.buffer_h)
+
+        states = states_r.clone()
+
+        action_r_onehot = torch.nn.functional.one_hot(actions_r.long(), num_classes=6).float()
+        action_h_onehot = torch.nn.functional.one_hot(actions_h.long(), num_classes=6).float()
+        global_actions= torch.cat((action_r_onehot, action_h_onehot), dim=1)
+
+        dones = dones_r.clone()
+        log_probs = log_probs_r + log_probs_h
+        next_states = next_states_r.clone()
+        # Calculate rewards.
+        rewards = self.disc.calculate_reward(
+            states, dones, log_probs[:, None], next_states, global_actions).squeeze()
+
+        self.actor_r.learn(total_timesteps=1000000, states_rollout=states_r.cpu().numpy(), next_states_rollout=next_states_r.cpu().numpy(),
+                         actions_rollout=actions_r.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_r.cpu().numpy(),
+                         values_rollout=values_r, log_probs_rollout=log_probs_r, infos_rollout=infos_r)
+        
+        self.actor_h.learn(total_timesteps=1000000, states_rollout=states_h.cpu().numpy(), next_states_rollout=next_states_h.cpu().numpy(),
+                         actions_rollout=actions_h.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_h.cpu().numpy(),
+                         values_rollout=values_h, log_probs_rollout=log_probs_h, infos_rollout=infos_h)
+
+    def update_disc(self, states, actions, dones, log_probs, next_states,
+                    states_exp, actions_exp, dones_exp, log_probs_exp,
+                    next_states_exp, failure_traj = False):
+        logits_pi = self.disc(states, dones, log_probs[:, None], next_states, actions)
+        logits_exp = self.disc(
+            states_exp, dones_exp, log_probs_exp[:, None], next_states_exp, actions_exp)
+
+        # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
+        loss_pi = -F.logsigmoid(-logits_pi).mean()
+        loss_exp = -F.logsigmoid(logits_exp).mean()
+        if not failure_traj:
+            loss_disc = loss_pi + loss_exp
+        else: loss_disc = -loss_exp
+
+        self.optim_disc.zero_grad()
+        loss_disc.backward()
+        self.optim_disc.step()
+
+    def buffer_add(self, buffer, state, action, next_state, reward, done, value, log_prob, info):
+        p = buffer['p']
+        buffer['state'][p] = torch.from_numpy(state).clone().float()
+        buffer['action'][p] = torch.tensor(action).clone()
+        buffer['next_state'][p] = torch.from_numpy(next_state).clone().float()
+        buffer['reward'][p] = reward
+        buffer['done'][p] = torch.tensor([int(done)]).float()
+        buffer['value'][p] = value
+        buffer['log_prob'][p] = log_prob
+        buffer['info'][p] = [info]
+        buffer['p'] += 1
+        buffer['p'] %= self.buffer_size
+        buffer['record'] += 1
+
+    def buffer_sample(self, buffer, expert=False):
+        if not expert:
+            current_buffer_size = min(buffer['record'], self.buffer_size)
+            idx = torch.randperm(current_buffer_size)[:self.batch_size]
+            return buffer['state'][idx], buffer['action'][idx], buffer['next_state'][idx], buffer['reward'][idx], \
+                   buffer['done'][idx], buffer['value'][idx], buffer['log_prob'][idx]
+        else:
+            current_buffer_size = len(buffer['state'])
+            idx = torch.randperm(current_buffer_size)[:self.batch_size]
+            return buffer['state'][idx], buffer['action'][idx], buffer['next_state'][idx], buffer['reward'][idx], \
+                   buffer['done'][idx]
+
+    def buffer_get(self, buffer):
+        current_buffer_size = min(buffer['record'], self.buffer_size)
+        return buffer['state'][:current_buffer_size], buffer['action'][:current_buffer_size], buffer['next_state'][:current_buffer_size], buffer['reward'][:current_buffer_size], \
+               buffer['done'][:current_buffer_size], buffer['value'][:current_buffer_size], buffer['log_prob'][:current_buffer_size], buffer['info'][:current_buffer_size]
+    
+    def best_loader(self, path):
+        files = os.listdir(path)
+        best_reward = -100
+        for file in files:
+            # print(f"Filename: {file}")
+            reward = int(file.split('_')[-1].split('.')[0])
+            step = int(file.split('_')[-2])
+            # print(f"Reward: {reward}, best reward: {best_reward}")
+            if reward > best_reward:
+                best_reward = reward
+                actor_r = f'actor_r_{step}_{reward}'
+                actor_h = f'actor_h_{step}_{reward}'
+                disc = f'disc_{step}_{reward}.pt'
+                # print("Weights chosen are: ", actor_r)
+        return actor_r, actor_h, disc
+
     def test(self, path, load_best=True, disc=None, actor_r=None, actor_h=None, test_epochs=1, render=False):
         ep_rewards = []
         ep_lengths = []
         render_first = True
         if load_best:
-            files = os.listdir(path)
-            best_reward = -100
-            for file in files:
-                # print(f"Filename: {file}")
-                reward = int(file.split('_')[-1].split('.')[0])
-                step = int(file.split('_')[-2])
-                # print(f"Reward: {reward}, best reward: {best_reward}")
-                if reward > best_reward:
-                    best_reward = reward
-                    actor_r = f'actor_r_{step}_{reward}'
-                    actor_h = f'actor_h_{step}_{reward}'
-                    disc = f'disc_{step}_{reward}.pt'
-                    # print("Weights chosen are: ", actor_r)
+            actor_r, actor_h, disc = self.best_loader(path)
 
         self.disc.load_state_dict(torch.load(f'{path}/{disc}'))
         self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
@@ -254,110 +378,6 @@ class AIRL(object):
             f'mean length: {round(np.mean(ep_lengths), 1)} | mean reward: {round(np.mean(ep_rewards), 1)}')
         return np.mean(ep_rewards)
 
-    def update(self):
-        for _ in range(self.epoch_disc):
-            self.learning_steps_disc += 1
-            states_r_policy, action_r_policy, next_states_r_policy, _, dones_r_policy, _, log_probs_r_policy = self.buffer_sample(self.buffer_r, expert=False)
-            states_h_policy, action_h_policy, next_states_h_policy, _, dones_h_policy, _, log_probs_h_policy = self.buffer_sample(self.buffer_h, expert=False)
-            states_r_exp, action_r_exp, next_states_r_exp, _, dones_r_exp = self.buffer_sample(self.buffer_r_exp, expert=True)
-            states_h_exp, action_h_exp, next_states_h_exp, _, dones_h_exp = self.buffer_sample(self.buffer_h_exp, expert=True)
-            with torch.no_grad():
-                _, log_probs_r_exp, _ = self.actor_r.policy.evaluate_actions(states_r_exp, action_r_exp)
-                _, log_probs_h_exp, _ = self.actor_h.policy.evaluate_actions(states_h_exp, action_h_exp)
-            action_r_policy_onehot = torch.nn.functional.one_hot(action_r_policy.long(), num_classes=6).float()
-            action_h_policy_onehot = torch.nn.functional.one_hot(action_h_policy.long(), num_classes=6).float()
-            global_actions_policy = torch.cat((action_r_policy_onehot, action_h_policy_onehot), dim=1)
-
-            action_r_exp_onehot = torch.nn.functional.one_hot(action_r_exp.long(), num_classes=6).float()
-            action_h_exp_onehot = torch.nn.functional.one_hot(action_h_exp.long(), num_classes=6).float()
-            global_actions_exp = torch.cat((action_r_exp_onehot, action_h_exp_onehot), dim=1)
-
-            states_policy = states_r_policy.clone()
-            dones_policy = dones_r_policy.clone()
-            log_probs_policy = log_probs_r_policy + log_probs_h_policy
-            next_states_policy = next_states_r_policy.clone()
-
-            states_exp = states_r_exp.clone()
-            dones_exp = dones_r_exp.clone()
-            log_probs_exp = log_probs_r_exp + log_probs_h_exp
-            next_states_exp = next_states_r_exp.clone()
-
-            self.update_disc(
-                states_policy, global_actions_policy, dones_policy, log_probs_policy, next_states_policy, 
-                states_exp, global_actions_exp, dones_exp, log_probs_exp, next_states_exp
-            )
-
-        states_r, actions_r, next_states_r, _, dones_r, values_r, log_probs_r, infos_r = self.buffer_get(self.buffer_r)
-        states_h, actions_h, next_states_h, _, dones_h, values_h, log_probs_h, infos_h = self.buffer_get(self.buffer_h)
-
-        states = states_r.clone()
-
-        action_r_onehot = torch.nn.functional.one_hot(actions_r.long(), num_classes=6).float()
-        action_h_onehot = torch.nn.functional.one_hot(actions_h.long(), num_classes=6).float()
-        global_actions= torch.cat((action_r_onehot, action_h_onehot), dim=1)
-
-        dones = dones_r.clone()
-        log_probs = log_probs_r + log_probs_h
-        next_states = next_states_r.clone()
-        # Calculate rewards.
-        rewards = self.disc.calculate_reward(
-            states, dones, log_probs[:, None], next_states, global_actions).squeeze()
-
-        self.actor_r.learn(total_timesteps=1000000, states_rollout=states_r.cpu().numpy(), next_states_rollout=next_states_r.cpu().numpy(),
-                         actions_rollout=actions_r.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_r.cpu().numpy(),
-                         values_rollout=values_r, log_probs_rollout=log_probs_r, infos_rollout=infos_r)
-        
-        self.actor_h.learn(total_timesteps=1000000, states_rollout=states_h.cpu().numpy(), next_states_rollout=next_states_h.cpu().numpy(),
-                         actions_rollout=actions_h.cpu().numpy(), rewards_rollout=rewards.cpu().numpy(), dones_rollout=dones_h.cpu().numpy(),
-                         values_rollout=values_h, log_probs_rollout=log_probs_h, infos_rollout=infos_h)
-
-    def update_disc(self, states, actions, dones, log_probs, next_states,
-                    states_exp, actions_exp, dones_exp, log_probs_exp,
-                    next_states_exp):
-        logits_pi = self.disc(states, dones, log_probs[:, None], next_states, actions)
-        logits_exp = self.disc(
-            states_exp, dones_exp, log_probs_exp[:, None], next_states_exp, actions_exp)
-
-        # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
-        loss_pi = -F.logsigmoid(-logits_pi).mean()
-        loss_exp = -F.logsigmoid(logits_exp).mean()
-        loss_disc = loss_pi + loss_exp
-
-        self.optim_disc.zero_grad()
-        loss_disc.backward()
-        self.optim_disc.step()
-
-    def buffer_add(self, buffer, state, action, next_state, reward, done, value, log_prob, info):
-        p = buffer['p']
-        buffer['state'][p] = torch.from_numpy(state).clone().float()
-        buffer['action'][p] = torch.tensor(action).clone()
-        buffer['next_state'][p] = torch.from_numpy(next_state).clone().float()
-        buffer['reward'][p] = reward
-        buffer['done'][p] = torch.tensor([int(done)]).float()
-        buffer['value'][p] = value
-        buffer['log_prob'][p] = log_prob
-        buffer['info'][p] = [info]
-        buffer['p'] += 1
-        buffer['p'] %= self.buffer_size
-        buffer['record'] += 1
-
-    def buffer_sample(self, buffer, expert=False):
-        if not expert:
-            current_buffer_size = min(buffer['record'], self.buffer_size)
-            idx = torch.randperm(current_buffer_size)[:self.batch_size]
-            return buffer['state'][idx], buffer['action'][idx], buffer['next_state'][idx], buffer['reward'][idx], \
-                   buffer['done'][idx], buffer['value'][idx], buffer['log_prob'][idx]
-        else:
-            current_buffer_size = len(buffer['state'])
-            idx = torch.randperm(current_buffer_size)[:self.batch_size]
-            return buffer['state'][idx], buffer['action'][idx], buffer['next_state'][idx], buffer['reward'][idx], \
-                   buffer['done'][idx]
-
-    def buffer_get(self, buffer):
-        current_buffer_size = min(buffer['record'], self.buffer_size)
-        return buffer['state'][:current_buffer_size], buffer['action'][:current_buffer_size], buffer['next_state'][:current_buffer_size], buffer['reward'][:current_buffer_size], \
-               buffer['done'][:current_buffer_size], buffer['value'][:current_buffer_size], buffer['log_prob'][:current_buffer_size], buffer['info'][:current_buffer_size]
-
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
@@ -368,13 +388,18 @@ if __name__ == '__main__':
     p.add_argument('--env_id', type=str, default='ma_gym:HuRoSorting-v0')
     p.add_argument('--cuda', action='store_true')
     p.add_argument('--seed', type=int, default=1)
+    p.add_argument('--failure_traj', type=bool, default=False)
+    p.add_argument('--load_existing', type=bool, default=False)
     args = p.parse_args()
 
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
     print(f'Using {device}')
 
-    buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting.pt')
+    if not args.failure_traj:
+        buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting.pt')
+    else: buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting_failed.pt')
+
     buffer_r_exp = {
         'state': buffer_exp['robot_state'].clone(),
         'action': buffer_exp['robot_action'].clone(),
@@ -391,6 +416,10 @@ if __name__ == '__main__':
         'reward': buffer_exp['reward'].clone()
     }
 
-    airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
-    airl.train(args.num_steps)
-    # airl.test(path=os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-12-2022-11-43/', load_best=True)
+    trainpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
+    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
+
+    airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, 
+                load_existing=args.load_existing, trainpath=trainpath, eval_interval=args.eval_interval)
+    airl.train(args.num_steps, args.failure_traj)
+    # airl.test(testpath, load_best=True)
