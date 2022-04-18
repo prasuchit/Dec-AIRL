@@ -275,7 +275,7 @@ class AIRL(object):
         loss_exp = -F.logsigmoid(logits_exp).mean()
         if not failure_traj:
             loss_disc = loss_pi + loss_exp
-        else: loss_disc = -loss_exp
+        else: loss_disc = -(loss_pi + loss_exp)
 
         self.optim_disc.zero_grad()
         loss_disc.backward()
