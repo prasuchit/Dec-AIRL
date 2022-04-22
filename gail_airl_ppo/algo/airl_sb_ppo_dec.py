@@ -443,7 +443,7 @@ if __name__ == '__main__':
     }
 
     trainpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
-    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-21-2022-15-58/'
+    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-22-2022-14-49/'
 
     airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, 
                 load_existing=args.load_existing, trainpath=trainpath, eval_interval=args.eval_interval)
