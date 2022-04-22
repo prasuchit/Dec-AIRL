@@ -46,7 +46,7 @@ env = gym.make(env_id)
 total_timesteps = 10 ** 6
 
 init_fixed = False
-failure_traj = True
+failure_traj = False
 done = False
 state = env.reset(init_fixed)
 state_robot = state[:11].copy()
@@ -81,7 +81,6 @@ def failure_reset(env):
     env.set_prev_obsv(1, env.vals2sid(state[1]))
     onehot = env.get_global_onehot(state)
     return onehot
-
 
 
 if not failure_traj:

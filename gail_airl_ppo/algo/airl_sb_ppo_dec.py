@@ -53,7 +53,7 @@ class AIRL(object):
                             n_epochs=epoch_actor, max_grad_norm=max_grad_norm, clip_range=clip_eps,
                             gae_lambda=gae_lambda, ent_coef=ent_coef, airl=True, _init_setup_model=True)
 
-        self.load_models(load_existing, trainpath)
+        # print("Load existing", load_existing)
 
         self.optim_disc = Adam(self.disc.parameters(), lr=lr_disc)
         self.batch_size = batch_size
@@ -69,7 +69,8 @@ class AIRL(object):
         self.buffer_h_exp = buffer_h_exp
 
         self.path = None
-
+        self.best_reward = -100
+        self.load_models(load_existing, trainpath)
 
         self.buffer_r = {
             'state': torch.zeros(size=(n_steps, self.state_shape[0]), device=device),
@@ -99,13 +100,15 @@ class AIRL(object):
 
         self.buffer_size = n_steps
 
-    def load_models(self, trainpath, load_existing=False):        
+    def load_models(self, load_existing=False, trainpath=None):        
 
         if load_existing:
+            print("Trying to load an existing AIRL model.")
             actor_r, actor_h, disc = self.best_loader(trainpath)
             self.disc.load_state_dict(torch.load(f'{trainpath}/{disc}'))
             self.actor_r.set_parameters(f'{trainpath}/{actor_r}',  device=self.device)
             self.actor_h.set_parameters(f'{trainpath}/{actor_h}', device=self.device)
+        else: pass
 
     def train(self, total_timesteps=100000, failure_traj = False):
         state = self.env.reset()
@@ -152,14 +155,26 @@ class AIRL(object):
 
             if airl_step % self.eval_interval == 0:
                 print(f'Timesteps: {airl_step} | ', end='')
-                eval_reward = self.evaluate()
-                if eval_reward > self.best_reward:
-                    
+                eval_reward = self.evaluate(eval_epochs=10)
+                if not failure_traj:
+                    if eval_reward > self.best_reward:                    
+                        now = datetime.now()
+                        timestamp = now.strftime("%m-%d-%Y-%H-%M")
+                        self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/{timestamp}'
+                        try:
+                            os.mkdir(self.path)
+                            # print("New airl model folder created at: ", self.path)
+                        except FileExistsError:
+                            print("FileExistsError Exception!")
+
+                        torch.save(self.disc.state_dict(), f'{self.path}/disc_{airl_step}_{int(eval_reward)}.pt')
+                        self.actor_r.save(f'{self.path}/actor_r_{airl_step}_{int(eval_reward)}')
+                        self.actor_h.save(f'{self.path}/actor_h_{airl_step}_{int(eval_reward)}')
+                        self.best_reward = eval_reward
+                else:
                     now = datetime.now()
                     timestamp = now.strftime("%m-%d-%Y-%H-%M")
                     self.path = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/{timestamp}'
-
-                    self.best_reward = -100
                     try:
                         os.mkdir(self.path)
                         # print("New airl model folder created at: ", self.path)
@@ -169,12 +184,12 @@ class AIRL(object):
                     torch.save(self.disc.state_dict(), f'{self.path}/disc_{airl_step}_{int(eval_reward)}.pt')
                     self.actor_r.save(f'{self.path}/actor_r_{airl_step}_{int(eval_reward)}')
                     self.actor_h.save(f'{self.path}/actor_h_{airl_step}_{int(eval_reward)}')
-                    self.best_reward = eval_reward
 
     def evaluate(self, eval_epochs=10, render=False):
         ep_rewards = []
         ep_lengths = []
         render_first = True
+        verbose = False
         for eval_epoch in range(eval_epochs):
             eval_state = self.eval_env.reset()
             state_robot = eval_state[:11].copy()
@@ -189,7 +204,7 @@ class AIRL(object):
                     self.eval_env.render()
                 eval_action_r, _ = self.actor_r.predict(state_robot_input, deterministic=True)
                 eval_action_h, _ = self.actor_h.predict(state_human_input, deterministic=True)
-                eval_next_state, eval_reward, eval_done, eval_info = self.eval_env.step([eval_action_r, eval_action_h], verbose=0)
+                eval_next_state, eval_reward, eval_done, eval_info = self.eval_env.step([eval_action_r, eval_action_h], verbose)
                 ep_reward += eval_reward
                 ep_length += 1
                 eval_state = eval_next_state
@@ -200,6 +215,8 @@ class AIRL(object):
             render_first = False
             ep_rewards.append(ep_reward)
             ep_lengths.append(ep_length)
+            if eval_epoch == 0:
+                verbose = False
 
         print(
             f'mean length: {round(np.mean(ep_lengths), 1)} | mean reward: {round(np.mean(ep_rewards), 1)}')
@@ -270,12 +287,17 @@ class AIRL(object):
         logits_exp = self.disc(
             states_exp, dones_exp, log_probs_exp[:, None], next_states_exp, actions_exp)
 
-        # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
-        loss_pi = -F.logsigmoid(-logits_pi).mean()
-        loss_exp = -F.logsigmoid(logits_exp).mean()
         if not failure_traj:
+            # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
+            loss_pi = -F.logsigmoid(-logits_pi).mean()
+            loss_exp = -F.logsigmoid(logits_exp).mean()
             loss_disc = loss_pi + loss_exp
-        else: loss_disc = -(loss_pi + loss_exp)
+        else: 
+            # Discriminator is to maximize E_{\pi} [log(D)] + E_{exp} [log(1 - D)].
+            loss_pi = -F.logsigmoid(logits_pi).mean()
+            loss_exp = -F.logsigmoid(-logits_exp).mean()
+            loss_disc = loss_exp \
+                        + loss_pi
 
         self.optim_disc.zero_grad()
         loss_disc.backward()
@@ -339,7 +361,7 @@ class AIRL(object):
         self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
         self.actor_h.set_parameters(f'{path}/{actor_h}', device=self.device)
         for test_epoch in range(test_epochs):
-            test_state = self.test_env.reset(fixed_init = False)
+            test_state = self.test_env.reset(fixed_init = True)
             state_robot = test_state[:11].copy()
             state_human = test_state[11:].copy()
             state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
@@ -362,7 +384,7 @@ class AIRL(object):
                 
                 log_probs = test_action_r_log_prob + test_action_h_log_prob
                 disc_reward = self.disc.calculate_reward(state_robot_input, torch.tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
-                print(f'original reward: {test_reward} | disc reward: {round(disc_reward.item(), 3)}')
+                print(f'original reward: {test_reward} | disc reward: {round(disc_reward.item(), 3)} | robot act prob: {test_action_r_log_prob.item()} | human act rob: {test_action_h_log_prob.item()}')
                 ep_reward += test_reward
                 ep_length += 1
                 test_state = test_next_state
@@ -390,15 +412,19 @@ if __name__ == '__main__':
     p.add_argument('--seed', type=int, default=1)
     p.add_argument('--failure_traj', type=bool, default=False)
     p.add_argument('--load_existing', type=bool, default=False)
+    p.add_argument('--test', type=bool, default=False)
     args = p.parse_args()
 
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
-    print(f'Using {device}')
+    # print(f'args.load_existing {args.load_existing}')
 
     if not args.failure_traj:
+        print("Loading successful trajectories")
         buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting.pt')
-    else: buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting_failed.pt')
+    else:
+        print("Loading failure trajectories") 
+        buffer_exp = torch.load(os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/buffers/ma_gym:hurosorting_failed.pt')
 
     buffer_r_exp = {
         'state': buffer_exp['robot_state'].clone(),
@@ -417,9 +443,10 @@ if __name__ == '__main__':
     }
 
     trainpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
-    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
+    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-21-2022-15-58/'
 
     airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, 
                 load_existing=args.load_existing, trainpath=trainpath, eval_interval=args.eval_interval)
-    airl.train(args.num_steps, args.failure_traj)
-    # airl.test(testpath, load_best=True)
+    if not args.test:
+        airl.train(args.num_steps, args.failure_traj)
+    else: airl.test(testpath, load_best=True)
