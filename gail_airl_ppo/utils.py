@@ -5,6 +5,9 @@ import torch
 from .buffer import Buffer
 
 
+def normalize(x):
+    return (x - x.mean()) / (x.std() + 1e-8)
+
 def soft_update(target, source, tau):
     for t, s in zip(target.parameters(), source.parameters()):
         t.data.mul_(1.0 - tau)

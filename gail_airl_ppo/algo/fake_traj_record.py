@@ -67,26 +67,29 @@ length_stats = []
 ep_reward = 0
 ep_length = 0
 
-def failure_reset(env):
+def failure_reset(env, init_fixed = False):
     random.seed(time())
     env._step_count = 0
     env.reward = env.step_cost
     env._agent_dones = False
     env.steps_beyond_done = None
-    state = random.choice([[[2,2,2],[2,2,2]],
-            [[3,3,2],[3,3,2]],
-            [[1,random.choice([0,2,3]),random.choice([1,2])],[1,random.choice([0,2,3]),random.choice([1,2])]],
-            [[0,random.choice([0,2,3]),0],[0,random.choice([0,2,3]),0]]])
+    if init_fixed:
+        state = [[0,3,0],[0,3,0]]
+    else:
+        state = random.choice([[[2,2,2],[2,2,2]],
+                [[3,3,2],[3,3,2]],
+                [[1,random.choice([0,2,3]),random.choice([1,2])],[1,random.choice([0,2,3]),random.choice([1,2])]],
+                [[0,random.choice([0,2,3]),0],[0,random.choice([0,2,3]),0]]])
     env.set_prev_obsv(0, env.vals2sid(state[0]))
     env.set_prev_obsv(1, env.vals2sid(state[1]))
     onehot = env.get_global_onehot(state)
     return onehot
 
 
-if not failure_traj:
-    state = env.reset(init_fixed)
-else:
-    state = failure_reset(env)
+# if not failure_traj:
+#     state = env.reset(init_fixed)
+# else:
+state = failure_reset(env, init_fixed)
 
 for _ in tqdm(range(total_timesteps)):
     state_robot = state[:11].copy()
@@ -176,9 +179,10 @@ for _ in tqdm(range(total_timesteps)):
 
     if done:
         init_fixed = not init_fixed
-        if not failure_traj:
-            state = env.reset(init_fixed)
-        else: state = failure_reset(env)
+        # if not failure_traj:
+        #     state = env.reset(init_fixed)
+        # else: 
+        state = failure_reset(env, init_fixed)
         reward_stats.append(ep_reward)
         length_stats.append(ep_length)
         done = False
@@ -194,7 +198,7 @@ trajs_human_next_states = torch.tensor(trajs_human_next_states).float()
 trajs_robot_actions = torch.tensor(trajs_robot_actions).float()
 trajs_human_actions = torch.tensor(trajs_human_actions).float()
 trajs_rewards = torch.tensor(trajs_rewards).float()
-trajs_dones = torch.tensor(trajs_dones).float()
+trajs_dones = torch.tensor(trajs_dones).float()[:, None]
 
 trajectories = {
     'robot_state': trajs_robot_states,

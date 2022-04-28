@@ -55,6 +55,11 @@ from stable_baselines3.common.torch_layers import (
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
 
+import sys
+sys.path.append(os.getcwd()+f'/gail-airl-ppo/')
+from gail_airl_ppo.utils import normalize
+
+
 
 SEED = 1
 random.seed(SEED)
@@ -624,9 +629,10 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
 
                 values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
                 values = values.flatten()
+
                 # Normalize advantage
                 advantages = rollout_data.advantages
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+                advantages = normalize(advantages)
 
                 # ratio between old and new policy, should be one at the first iteration
                 ratio = th.exp(log_prob - rollout_data.old_log_prob)
