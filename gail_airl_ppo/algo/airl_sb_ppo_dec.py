@@ -18,6 +18,7 @@ from gail_airl_ppo.algo.ppo_sb_dec import PPO_Dec, ActorCriticPolicy_Dec
 from gail_airl_ppo.network.disc import AIRLDiscrimAction
 from gail_airl_ppo.utils import normalize
 
+robot_state_EOF = 12
 
 class AIRL(object):
     def __init__(self, env_id, buffer_r_exp, buffer_h_exp, device, seed, load_existing, trainpath, eval_interval=500,
@@ -116,10 +117,15 @@ class AIRL(object):
 
     def train(self, total_timesteps=100000, failure_traj = False):
         state = self.env.reset()
-        state_robot = state[:11].copy()
-        state_human = state[11:].copy()
+        state_robot = state[:robot_state_EOF].copy()
+        state_human = state[robot_state_EOF:].copy()
         state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
         state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
+
+        # path=
+
+        # self.disc.load_state_dict(torch.load(f'{path}/{disc}'))
+
 
         for airl_step in range(1, total_timesteps):
             with torch.no_grad():
@@ -132,8 +138,8 @@ class AIRL(object):
 
             next_state, reward, done, info = self.env.step(actions)
 
-            n_state_robot = next_state[:11].copy()
-            n_state_human = next_state[11:].copy()
+            n_state_robot = next_state[:robot_state_EOF].copy()
+            n_state_human = next_state[robot_state_EOF:].copy()
             n_state_robot_input = np.concatenate([n_state_robot.copy(), n_state_human.copy()])
             n_state_human_input = np.concatenate([n_state_human.copy(), n_state_robot.copy()])
 
@@ -144,12 +150,15 @@ class AIRL(object):
             self.buffer_add(self.buffer_h, state_human_input, action_h, n_state_human_input, reward, done, values_h, log_probs_h, info)
 
             if done:
-                state = self.env.reset()
+                if np.random.rand() < 0.3:
+                    state = self.env.reset()
+                else:
+                    state = self.env.failure_reset()
             else:
                 state = next_state
 
-            state_robot = state[:11].copy()
-            state_human = state[11:].copy()
+            state_robot = state[:robot_state_EOF].copy()
+            state_human = state[robot_state_EOF:].copy()
             state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
             state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
 
@@ -184,8 +193,8 @@ class AIRL(object):
         for eval_epoch in range(eval_epochs):
             eval_state = self.eval_env.reset(fixed_init=fixed_init)
             fixed_init = False
-            state_robot = eval_state[:11].copy()
-            state_human = eval_state[11:].copy()
+            state_robot = eval_state[:robot_state_EOF].copy()
+            state_human = eval_state[robot_state_EOF:].copy()
             state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
             state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
             eval_done = False
@@ -202,8 +211,8 @@ class AIRL(object):
                 ep_reward += eval_reward
                 ep_length += 1
                 eval_state = eval_next_state
-                state_robot = eval_state[:11]
-                state_human = eval_state[11:]
+                state_robot = eval_state[:robot_state_EOF]
+                state_human = eval_state[robot_state_EOF:]
                 state_robot_input = np.concatenate([state_robot, state_human])
                 state_human_input = np.concatenate([state_human, state_robot])
             render_first = False
@@ -375,46 +384,51 @@ class AIRL(object):
         render_first = True
         verbose = True
 
-        if load_best:
-            actor_r, actor_h, disc = self.best_loader(path)
+        # if load_best:
+        #     actor_r, actor_h, disc = self.best_loader(path)
+        disc = 'disc_114688_26.pt'
+        actor_r = 'actor_r_114688_26'
+        actor_h = 'actor_h_114688_26'
 
         self.disc.load_state_dict(torch.load(f'{path}/{disc}'))
         self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
         self.actor_h.set_parameters(f'{path}/{actor_h}', device=self.device)
 
-        for i ,j in [[0, 0], [0, 1], [1, 0], [1, 1]]:
+        # for i ,j in [[0, 0], [0, 1], [1, 0], [1, 1]]:
+        for i in range(6):
+            for j in range(6):
 
-            test_state = self.test_env.reset(fixed_init = True)
-            state_robot = test_state[:11].copy()
-            state_human = test_state[11:].copy()
-            state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
-            state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
-            test_done = False
+                test_state = self.test_env.reset(fixed_init = True)
+                state_robot = test_state[:robot_state_EOF].copy()
+                state_human = test_state[robot_state_EOF:].copy()
+                state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
+                state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
+                test_done = False
 
-            state_robot_input = torch.tensor(state_robot_input)[None, :].float()
-            state_human_input = torch.tensor(state_human_input)[None, :].float()
+                state_robot_input = torch.tensor(state_robot_input)[None, :].float()
+                state_human_input = torch.tensor(state_human_input)[None, :].float()
 
-            test_action_r = torch.tensor([i])
-            test_action_h = torch.tensor([j])
+                test_action_r = torch.tensor([i])
+                test_action_h = torch.tensor([j])
 
-            action_r_onehot = torch.nn.functional.one_hot(test_action_r.long(), num_classes=6).float()
-            action_h_onehot = torch.nn.functional.one_hot(test_action_h.long(), num_classes=6).float()
-            global_test_actions = torch.cat((action_r_onehot, action_h_onehot), dim=1)
+                action_r_onehot = torch.nn.functional.one_hot(test_action_r.long(), num_classes=6).float()
+                action_h_onehot = torch.nn.functional.one_hot(test_action_h.long(), num_classes=6).float()
+                global_test_actions = torch.cat((action_r_onehot, action_h_onehot), dim=1)
 
-            _, test_action_r_log_prob, _ = self.actor_r.policy.evaluate_actions(state_robot_input, test_action_r)
-            _, test_action_h_log_prob, _ = self.actor_h.policy.evaluate_actions(state_human_input, test_action_h)
+                _, test_action_r_log_prob, _ = self.actor_r.policy.evaluate_actions(state_robot_input, test_action_r)
+                _, test_action_h_log_prob, _ = self.actor_h.policy.evaluate_actions(state_human_input, test_action_h)
 
-            test_action_r_dist = np.round(self.actor_r.policy.get_distribution(state_robot_input).distribution.logits[0].detach().numpy(), 2)
-            test_action_h_dist = np.round(self.actor_r.policy.get_distribution(state_human_input).distribution.logits[0].detach().numpy(), 2)
+                test_action_r_dist = np.round(self.actor_r.policy.get_distribution(state_robot_input).distribution.logits[0].detach().numpy(), 2)
+                test_action_h_dist = np.round(self.actor_r.policy.get_distribution(state_human_input).distribution.logits[0].detach().numpy(), 2)
 
-            log_probs = test_action_r_log_prob + test_action_h_log_prob
+                log_probs = test_action_r_log_prob + test_action_h_log_prob
 
-            test_next_state, test_reward, test_done, test_info = self.test_env.step([test_action_r, test_action_h], verbose=verbose)
+                test_next_state, test_reward, test_done, test_info = self.test_env.step([test_action_r, test_action_h], verbose=verbose)
 
-            disc_reward = self.disc.calculate_reward(state_robot_input, torch.tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
+                disc_reward = self.disc.calculate_reward(state_robot_input, torch.tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
 
-            print(f'robot action: {test_action_r.item()} | human action: {test_action_h.item()} | reward: {round(disc_reward.item(), 2)}')
-            print('=' * 100)
+                print(f'robot action: {test_action_r.item()} | human action: {test_action_h.item()} | reward: {round(disc_reward.item(), 2)}')
+                print('=' * 100)
         print(f'robot policy dist: {test_action_r_dist} | human dist: {test_action_h_dist}')
 
     def test(self, path, load_best=True, disc=None, actor_r=None, actor_h=None, test_epochs=1, render=False):
@@ -429,9 +443,9 @@ class AIRL(object):
         self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
         self.actor_h.set_parameters(f'{path}/{actor_h}', device=self.device)
         for test_epoch in range(test_epochs):
-            test_state = self.test_env.reset(fixed_init = True)
-            state_robot = test_state[:11].copy()
-            state_human = test_state[11:].copy()
+            test_state = self.test_env.failure_reset()
+            state_robot = test_state[:robot_state_EOF].copy()
+            state_human = test_state[robot_state_EOF:].copy()
             state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
             state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
             test_done = False
@@ -458,8 +472,8 @@ class AIRL(object):
                 ep_reward += test_reward
                 ep_length += 1
                 test_state = test_next_state
-                state_robot = test_state[:11]
-                state_human = test_state[11:]
+                state_robot = test_state[:robot_state_EOF]
+                state_human = test_state[robot_state_EOF:]
                 state_robot_input = np.concatenate([state_robot, state_human])
                 state_human_input = np.concatenate([state_human, state_robot])
             render_first = False
@@ -561,12 +575,12 @@ if __name__ == '__main__':
 
     ###########################################################################################################
 
-    trainpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-27-2022-15-15/'
-    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-27-2022-15-15/'
+    trainpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-13-2022-19-37/'
+    testpath = os.getcwd()+f'/gail-airl-ppo/gail_airl_ppo/algo/models_airl/04-30-2022-01-45/'
 
     airl = AIRL(env_id=env_id, buffer_r_exp=buffer_r_exp, buffer_h_exp=buffer_h_exp, device=device, seed=args.seed, 
                 load_existing=args.load_existing, trainpath=trainpath, eval_interval=args.eval_interval)
     if not args.test:
         airl.train(args.num_steps, args.failure_traj)
-    # else: airl.test(testpath, load_best=True)
-    else: airl.test_disc(testpath, load_best=True)
+    else: airl.test(testpath, load_best=True)
+    # else: airl.test_disc(testpath, load_best=True)

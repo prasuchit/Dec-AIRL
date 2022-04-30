@@ -39,18 +39,20 @@ ACTIONS = {
 actions_r = None
 actions_h = None
 
+robot_state_EOF = 12
+
 env_id = 'ma_gym:HuRoSorting-v0'
 
 env = gym.make(env_id)
 
-total_timesteps = 10 ** 6
+total_timesteps = 10 ** 4
 
 init_fixed = False
 failure_traj = False
 done = False
 state = env.reset(init_fixed)
-state_robot = state[:11].copy()
-state_human = state[11:].copy()
+state_robot = state[:robot_state_EOF].copy()
+state_human = state[robot_state_EOF:].copy()
 state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
 state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
 trajs_robot_states = []
@@ -67,33 +69,15 @@ length_stats = []
 ep_reward = 0
 ep_length = 0
 
-def failure_reset(env, init_fixed = False):
-    random.seed(time())
-    env._step_count = 0
-    env.reward = env.step_cost
-    env._agent_dones = False
-    env.steps_beyond_done = None
-    if init_fixed:
-        state = [[0,3,0],[0,3,0]]
-    else:
-        state = random.choice([[[2,2,2],[2,2,2]],
-                [[3,3,2],[3,3,2]],
-                [[1,random.choice([0,2,3]),random.choice([1,2])],[1,random.choice([0,2,3]),random.choice([1,2])]],
-                [[0,random.choice([0,2,3]),0],[0,random.choice([0,2,3]),0]]])
-    env.set_prev_obsv(0, env.vals2sid(state[0]))
-    env.set_prev_obsv(1, env.vals2sid(state[1]))
-    onehot = env.get_global_onehot(state)
-    return onehot
-
 
 # if not failure_traj:
 #     state = env.reset(init_fixed)
 # else:
-state = failure_reset(env, init_fixed)
+state = env.failure_reset(init_fixed)
 
 for _ in tqdm(range(total_timesteps)):
-    state_robot = state[:11].copy()
-    state_human = state[11:].copy()
+    state_robot = state[:robot_state_EOF].copy()
+    state_human = state[robot_state_EOF:].copy()
     state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
     state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
     oloc_r, eefloc_r, pred_r = np.argmax(state_robot[:4]), np.argmax(state_robot[4:8]), np.argmax(state_robot[8:11])
@@ -163,8 +147,8 @@ for _ in tqdm(range(total_timesteps)):
     # print("Reward: ", reward)
     # print("Done: ", done)
 
-    next_state_robot = next_state[:11].copy()
-    next_state_human = next_state[11:].copy()
+    next_state_robot = next_state[:robot_state_EOF].copy()
+    next_state_human = next_state[robot_state_EOF:].copy()
     next_state_robot_input = np.concatenate([next_state_robot.copy(), next_state_human.copy()])
     next_state_human_input = np.concatenate([next_state_human.copy(), next_state_robot.copy()])
 
@@ -182,7 +166,7 @@ for _ in tqdm(range(total_timesteps)):
         # if not failure_traj:
         #     state = env.reset(init_fixed)
         # else: 
-        state = failure_reset(env, init_fixed)
+        state = env.failure_reset(init_fixed)
         reward_stats.append(ep_reward)
         length_stats.append(ep_length)
         done = False

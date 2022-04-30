@@ -66,6 +66,7 @@ random.seed(SEED)
 th.manual_seed(SEED)
 np.random.seed(SEED)
 th.use_deterministic_algorithms(True)
+robot_state_EOF = 12
 
 
 class ActorCriticPolicy_Dec(BasePolicy):
@@ -781,8 +782,8 @@ class Train(object):
         self.model_h = model_h
 
         state = self.env.reset(self.fixed_init) # [state of robot, state of human]
-        state_robot = state[:11].copy()
-        state_human = state[11:].copy()
+        state_robot = state[:robot_state_EOF].copy()
+        state_human = state[robot_state_EOF:].copy()
         state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
         state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
         for airl_epoch in range(1, airl_epochs + 1):
@@ -824,8 +825,8 @@ class Train(object):
                 clipped_actions = copy(actions)
                 
                 new_obs, rewards, dones, infos = self.env.step(clipped_actions, verbose=0)
-                n_state_robot = new_obs[:11].copy()
-                n_state_human = new_obs[11:].copy()
+                n_state_robot = new_obs[:robot_state_EOF].copy()
+                n_state_human = new_obs[robot_state_EOF:].copy()
                 n_state_robot_input = np.concatenate([n_state_robot.copy(), n_state_human.copy()])
                 n_state_human_input = np.concatenate([n_state_human.copy(), n_state_robot.copy()])
 
@@ -851,8 +852,8 @@ class Train(object):
                     state = self.env.reset(self.fixed_init)
                 else:
                     state = new_obs
-                state_robot = state[:11].copy()
-                state_human = state[11:].copy()
+                state_robot = state[:robot_state_EOF].copy()
+                state_human = state[robot_state_EOF:].copy()
                 state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
                 state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
 
@@ -892,8 +893,8 @@ class Train(object):
         ep_lengths = []
         for eval_epoch in range(eval_epochs):
             eval_state = self.eval_env.reset(self.fixed_init)
-            state_robot = eval_state[:11].copy()
-            state_human = eval_state[11:].copy()
+            state_robot = eval_state[:robot_state_EOF].copy()
+            state_human = eval_state[robot_state_EOF:].copy()
             state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
             state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
             eval_done = False
@@ -906,8 +907,8 @@ class Train(object):
                 ep_reward += eval_reward
                 ep_length += 1
                 eval_state = eval_next_state
-                state_robot = eval_state[:11]
-                state_human = eval_state[11:]
+                state_robot = eval_state[:robot_state_EOF]
+                state_human = eval_state[robot_state_EOF:]
                 state_robot_input = np.concatenate([state_robot, state_human])
                 state_human_input = np.concatenate([state_human, state_robot])
             ep_rewards.append(ep_reward)
@@ -921,8 +922,8 @@ class Train(object):
         model_r.load(f'{path}/model_r_{epoch}')
         model_h.load(f'{path}/model_h_{epoch}')
         eval_state = self.eval_env.reset(self.fixed_init)
-        state_robot = eval_state[:11]
-        state_human = eval_state[11:]
+        state_robot = eval_state[:robot_state_EOF]
+        state_human = eval_state[robot_state_EOF:]
         state_robot_input = np.concatenate([state_robot, state_human])
         state_human_input = np.concatenate([state_human, state_robot])
         eval_done = False
@@ -935,8 +936,8 @@ class Train(object):
             ep_reward += eval_reward
             ep_length += 1
             eval_state = eval_next_state
-            state_robot = eval_state[:11]
-            state_human = eval_state[11:]
+            state_robot = eval_state[:robot_state_EOF]
+            state_human = eval_state[robot_state_EOF:]
             state_robot_input = np.concatenate([state_robot, state_human])
             state_human_input = np.concatenate([state_human, state_robot])
         print(f'Reward Mean: {round(np.mean(ep_reward), 2)} | Episode Mean Length: {round(np.mean(ep_length), 2)}')
