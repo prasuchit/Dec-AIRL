@@ -1,8 +1,20 @@
 from tqdm import tqdm
 import numpy as np
 import torch
+import torch as th
 
-from .buffer import Buffer
+import sys
+import os
+sys.path.append(os.getcwd() + f'/airl-ppo/')
+from buffer import Buffer
+
+
+def obs_as_tensor(obs, device='cpu'):
+    obs = th.tensor(obs).float().to(device)
+    if len(obs.shape) == 2:
+        return obs[None, :]
+    elif len(obs.shape) == 3:
+        return obs
 
 
 def normalize(x):

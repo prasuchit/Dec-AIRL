@@ -1,10 +1,29 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import os
+import sys
 
-from .utils import build_mlp
+if 'airl-ppo' in os.getcwd():
+    PACKAGE_PATH = os.getcwd()
+else:
+    PACKAGE_PATH = os.getcwd() + f'/airl-ppo/'
 
-from gail_airl_ppo.utils import normalize
+sys.path.append(PACKAGE_PATH)
+
+
+def build_mlp(input_dim, output_dim, hidden_units=[64, 64],
+              hidden_activation=nn.Tanh(), output_activation=None):
+    layers = []
+    units = input_dim
+    for next_units in hidden_units:
+        layers.append(nn.Linear(units, next_units))
+        layers.append(hidden_activation)
+        units = next_units
+    layers.append(nn.Linear(units, output_dim))
+    if output_activation is not None:
+        layers.append(output_activation)
+    return nn.Sequential(*layers)
 
 
 class GAILDiscrim(nn.Module):
@@ -69,23 +88,26 @@ class AIRLDiscrim(nn.Module):
             return -F.logsigmoid(-logits)
 
 
-class AIRLDiscrimAction(nn.Module):
+class AIRLDiscrimMultiAgent(nn.Module):
 
-    def __init__(self, state_shape, gamma, num_of_actions,
+    def __init__(self, obs_space, gamma, action_space, n_agents,
                  hidden_units_r=(64, 64),
                  hidden_units_v=(64, 64),
                  hidden_activation_r=nn.ReLU(inplace=True),
                  hidden_activation_v=nn.ReLU(inplace=True)):
         super().__init__()
 
+        state_shape = obs_space[0].shape[0] * n_agents
+        action_shape = action_space[0].n * n_agents
+        
         self.g = build_mlp(
-            input_dim=state_shape[0] + num_of_actions,
+            input_dim=state_shape + action_shape,
             output_dim=1,
             hidden_units=hidden_units_r,
             hidden_activation=hidden_activation_r
         )
         self.h = build_mlp(
-            input_dim=state_shape[0],
+            input_dim=state_shape,
             output_dim=1,
             hidden_units=hidden_units_v,
             hidden_activation=hidden_activation_v
@@ -98,12 +120,14 @@ class AIRLDiscrimAction(nn.Module):
         rs = self.g(states_actions)
         vs = self.h(states)
         next_vs = self.h(next_states)
-        # return normalize(rs + self.gamma * (1 - dones) * next_vs - vs)
         return rs + self.gamma * (1 - dones) * next_vs - vs
 
     def forward(self, states, dones, log_pis, next_states, actions):
         # Discriminator's output is sigmoid(f - log_pi).
-        return self.f(states, dones, next_states, actions) - log_pis
+        global_states = states.reshape(states.shape[0],-1)
+        global_next_states = next_states.reshape(states.shape[0],-1)
+        
+        return self.f(global_states, dones, global_next_states, actions) - log_pis
 
     def calculate_reward(self, states, dones, log_pis, next_states, actions):
         with torch.no_grad():
