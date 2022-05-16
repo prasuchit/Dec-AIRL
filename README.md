@@ -41,7 +41,7 @@ The following are the steps to be followed to get this package working:
 
         conda activate airl
 
-    3.1) cd ma-gym
+  3.1) cd ma-gym
 
         pip install -e . 
 
