@@ -9,7 +9,8 @@ buffers/
 run.sh
 models/*.zip
 models/*.pt
-models_airl/*
+models_airl/*.pt
+models_airl/*.zip
 buffers/*
 *.pkl
 *.zip

@@ -45,6 +45,6 @@ if __name__ == '__main__':
 
     env_id = args.env
     ppo = Dec_Train(env_id)
-    ppo.train(epochs=args.training_epochs)
+    ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{env_id}')
 
     ppo.save(path=f'{PACKAGE_PATH}/models/{env_id}')

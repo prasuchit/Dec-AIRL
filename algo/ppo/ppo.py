@@ -419,7 +419,7 @@ class Dec_Train():
         self.n_agents = self.env.n_agents
         self.models = [PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in range(self.n_agents)]
 
-    def train(self, epochs=10, n_steps=2048):
+    def train(self, epochs=10, n_steps=2048, path = os.getcwd()):
         obs = self.env.reset()
         for epoch in range(epochs):
             states_rollout = []
@@ -471,7 +471,7 @@ class Dec_Train():
                         log_probs_rollout=log_probs_rollout[:, i], infos_rollout=infos_rollout) for i in range(self.n_agents)]
 
             print(f'epoch: {epoch} | avg length: {round(n_steps / np.sum(dones_rollout))} | avg reward: {round(np.sum(rewards_rollout) / np.sum(dones_rollout), 2)}')
-            self.save()
+            self.save(path)
     
     def test(self, test_epochs=10, load_model=False, load_path=None, env_id=None):
         if load_model:

@@ -47,12 +47,14 @@ class AIRL(object):
                  batch_size=128, lr_actor=3e-4, lr_disc=3e-4,
                  units_disc_r=(64, 64), units_disc_v=(64, 64),
                  epoch_actor=10, epoch_disc=10, clip_eps=0.2, gae_lambda=0.97,
-                 ent_coef=0.0, max_grad_norm=0.5):
+                 ent_coef=0.0, max_grad_norm=0.5, path = os.getcwd()):
+
         self.env = gym.make(env_id)
         self.env.seed(seed)
         self.seed = seed
         self.n_agents = self.env.n_agents
         self.device = device
+        self.path = path
 
         # if self.env.observation_space.__class__.__name__ == 'Discrete':
         #     self.state_shape = (self.env.observation_space.n,)
@@ -96,9 +98,7 @@ class AIRL(object):
         self.global_observation_shape = self.env.observation_space[0].shape[0] * self.n_agents
         self.local_observation_shape = self.env.observation_space[0].shape[0]
         self.action_shape = self.env.action_space[0].n
-
-        self.path = None
-        self.best_reward = -100
+        self.best_reward = -1000
         # self.load_models(load_existing, trainpath)
 
         self.buffers_policy = {
@@ -250,6 +250,9 @@ class AIRL(object):
             if airl_step % self.eval_interval == 0:
                 print(f'Timesteps: {airl_step} | ', end='')
                 eval_reward = self.evaluate(eval_epochs=10)
+                if eval_reward > self.best_reward:
+                    self.best_reward = eval_reward
+                    self.save(airl_step, self.best_reward, path = self.path)
 
     def evaluate(self, eval_epochs=10):
         reward_stats = []
@@ -289,3 +292,12 @@ class AIRL(object):
         eval_rewards = np.mean(reward_stats)
         print(f'Avg Length: {round(np.mean(length_stats), 2)} | Avg Reward: {round(eval_rewards, 2)}')
         return eval_rewards
+
+    def save(self,step, reward, path=os.getcwd()):
+        path = f"{path}/step_{step}_reward_{int(reward)}"
+        print(f"\nSaving models at: {path}\n")
+        if not os.path.exists(path):
+            os.makedirs(path)
+        torch.save(self.disc.state_dict(), f'{path}/disc.pt')
+        for agent_id in range(self.n_agents):
+            self.actors[agent_id].save(f'{path}/{agent_id}')

@@ -29,6 +29,7 @@ import argparse
 import gym
 import numpy as np
 import torch
+from datetime import datetime
 
 path = os.path.dirname (os.path.realpath (__file__))
 PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
@@ -58,5 +59,7 @@ if __name__ == '__main__':
 
     buffers_exp = torch.load(f'{PACKAGE_PATH}/buffers/{env_id}/data.pt')
 
-    airl = AIRL(env_id=env_id, buffers_exp=buffers_exp, device=device, seed=args.seed, eval_interval=args.eval_interval)
+    save_dir = f'{PACKAGE_PATH}/models_airl/' + datetime.now().strftime('%Y-%m-%d_%H-%M')
+
+    airl = AIRL(env_id=env_id, buffers_exp=buffers_exp, device=device, seed=args.seed, eval_interval=args.eval_interval, path = save_dir)
     airl.train()
