@@ -49,6 +49,7 @@ class HuRoSorting():
                     verbose = False, debug = False, setTransition = True, setReward = True):
 
         global ACTION_MEANING, ONIONLOC, EEFLOC, PREDICTIONS, AGENT_MEANING
+        self.name = 'HuRoSorting'
         self.n_agents = len(AGENT_MEANING)
         self.full_observable = full_observable
         self.verbose = verbose

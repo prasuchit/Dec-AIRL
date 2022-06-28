@@ -4,6 +4,7 @@ import gym
 from gym import spaces
 import os
 import torch as th
+import torch
 from torch.nn import functional as F
 from datetime import datetime
 import numpy as np
@@ -262,7 +263,7 @@ class ActorCriticPolicy_Dec(BasePolicy):
         """
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
-        observation = observation.float()
+        observation = torch.tensor(observation).float()
         obs_actor = observation[..., :self.observation_space_actor_dim]
         _, latent_vf_critic = self.mlp_extractor_critic(observation)
         latent_pi_actor, _ = self.mlp_extractor_actor(obs_actor)

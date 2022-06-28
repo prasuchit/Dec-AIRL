@@ -4,8 +4,6 @@ import torch.nn.functional as F
 
 from .utils import build_mlp
 
-from gail_airl_ppo.utils import normalize
-
 
 class GAILDiscrim(nn.Module):
 
@@ -98,7 +96,6 @@ class AIRLDiscrimAction(nn.Module):
         rs = self.g(states_actions)
         vs = self.h(states)
         next_vs = self.h(next_states)
-        # return normalize(rs + self.gamma * (1 - dones) * next_vs - vs)
         return rs + self.gamma * (1 - dones) * next_vs - vs
 
     def forward(self, states, dones, log_pis, next_states, actions):

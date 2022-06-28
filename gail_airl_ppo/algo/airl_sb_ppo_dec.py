@@ -386,9 +386,9 @@ class AIRL(object):
 
         # if load_best:
         #     actor_r, actor_h, disc = self.best_loader(path)
-        disc = 'disc_114688_26.pt'
-        actor_r = 'actor_r_114688_26'
-        actor_h = 'actor_h_114688_26'
+        disc = 'disc_2830336_88.pt'
+        actor_r = 'actor_r_2830336_88'
+        actor_h = 'actor_h_2830336_88'
 
         self.disc.load_state_dict(torch.load(f'{path}/{disc}'))
         self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
@@ -582,5 +582,5 @@ if __name__ == '__main__':
                 load_existing=args.load_existing, trainpath=trainpath, eval_interval=args.eval_interval)
     if not args.test:
         airl.train(args.num_steps, args.failure_traj)
-    else: airl.test(testpath, load_best=True)
-    # else: airl.test_disc(testpath, load_best=True)
+    # else: airl.test(testpath, load_best=True)
+    else: airl.test_disc(testpath, load_best=True)

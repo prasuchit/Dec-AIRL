@@ -5,9 +5,13 @@ buffers/
 *.log
 *.out
 run.sh
+/gail_airl_ppo/__pycache__/
+/gail_airl_ppo/algo/__pycache__/
 /gail_airl_ppo/algo/models/*
 /gail_airl_ppo/algo/models_airl/*
 /gail_airl_ppo/algo/buffers/*
+/gail_airl_ppo/algo/expert_data/*
+/gail_airl_ppo/algo/results/*
 *.pkl
 *.zip
 weights/*
