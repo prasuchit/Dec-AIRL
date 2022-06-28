@@ -28,8 +28,9 @@ The following are the steps to be followed to get this package working:
 
    [Multi-agent Gym](https://github.com/prasuchit/ma-gym.git)
    
-   Do:        
-        sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade
+   Do(optional):     
+   
+          sudo apt-get update && sudo apt-get upgrade && sudo apt-get dist-upgrade
    
   2.) Cd into the package folder and create a new conda env using the environment yml file:
    
@@ -39,7 +40,7 @@ The following are the steps to be followed to get this package working:
       
   3.) Assuming you've crossed all these steps fully, activate the conda env:
 
-        conda activate airl
+        conda activate dec-airl
 
   3.1) cd ma-gym
 
@@ -47,7 +48,7 @@ The following are the steps to be followed to get this package working:
 
         cd ..
     
-        cd HRI-AIRL && mkdir {buffers, models, models_airl}
+        cd HRI-AIRL && mkdir -p {buffers, models, models_airl}
 
   4.) The following commands can be used to train an expert, record trajectories for DecHuRoSorting-v0 and run Multi-agent AIRL HuRo-TWIRL:
 
@@ -56,3 +57,5 @@ The following are the steps to be followed to get this package working:
         python3 scripts/record.py --env ma_gym:DecHuRoSorting-v0
 
         python3 scripts/irl.py --env ma_gym:DecHuRoSorting-v0
+        
+### Feel free to raise any issues you face, we'll address it as soon as possible.
