@@ -1,5 +1,5 @@
-.vscode/
-logs/
+.vscode/*
+logs/*
 __pycache__/
 /algo/__pycache__/
 /scripts/__pycache__/
@@ -7,11 +7,11 @@ buffers/
 *.log
 *.out
 run.sh
-models/*.zip
-models/*.pt
-models_airl/*.pt
-models_airl/*.zip
+models/*
+!models/dummy_file.txt
+models_airl/*
+!models_airl/dummy_file.txt
 buffers/*
-*.pkl
-*.zip
+!buffers/dummy_file.txt
 weights/*
+saved_policies/*

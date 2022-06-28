@@ -1,4 +1,4 @@
-name: airl
+name: dec-airl
 channels:
   - pytorch
   - conda-forge
