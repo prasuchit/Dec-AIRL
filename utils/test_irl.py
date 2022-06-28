@@ -58,52 +58,7 @@ class AIRL_Test(AIRL):
                  ent_coef=ent_coef, max_grad_norm=max_grad_norm, path = path) 
 
     def test_disc(self, path):
-
         raise NotImplementedError
-
-        # verbose = True
-        # disc = 'disc_2830336_88.pt'
-        # actor_r = 'actor_r_2830336_88'
-        # actor_h = 'actor_h_2830336_88'
-
-        # self.disc.load_state_dict(torch.load(f'{path}/{disc}'))
-        # self.actor_r.set_parameters(f'{path}/{actor_r}',  device=self.device)
-        # self.actor_h.set_parameters(f'{path}/{actor_h}', device=self.device)
-        # for i in range(6):
-        #     for j in range(6):
-
-        #         test_state = self.test_env.reset(fixed_init = True)
-        #         state_robot = test_state[:robot_state_EOF].copy()
-        #         state_human = test_state[robot_state_EOF:].copy()
-        #         state_robot_input = np.concatenate([state_robot.copy(), state_human.copy()])
-        #         state_human_input = np.concatenate([state_human.copy(), state_robot.copy()])
-        #         test_done = False
-
-        #         state_robot_input = torch.tensor(state_robot_input)[None, :].float()
-        #         state_human_input = torch.tensor(state_human_input)[None, :].float()
-
-        #         test_action_r = torch.tensor([i])
-        #         test_action_h = torch.tensor([j])
-
-        #         action_r_onehot = torch.nn.functional.one_hot(test_action_r.long(), num_classes=6).float()
-        #         action_h_onehot = torch.nn.functional.one_hot(test_action_h.long(), num_classes=6).float()
-        #         global_test_actions = torch.cat((action_r_onehot, action_h_onehot), dim=1)
-
-        #         _, test_action_r_log_prob, _ = self.actor_r.policy.evaluate_actions(state_robot_input, test_action_r)
-        #         _, test_action_h_log_prob, _ = self.actor_h.policy.evaluate_actions(state_human_input, test_action_h)
-
-        #         test_action_r_dist = np.round(self.actor_r.policy.get_distribution(state_robot_input).distribution.logits[0].detach().numpy(), 2)
-        #         test_action_h_dist = np.round(self.actor_r.policy.get_distribution(state_human_input).distribution.logits[0].detach().numpy(), 2)
-
-        #         log_probs = test_action_r_log_prob + test_action_h_log_prob
-
-        #         test_next_state, test_reward, test_done, test_info = self.test_env.step([test_action_r, test_action_h], verbose=verbose)
-
-        #         disc_reward = self.disc.calculate_reward(state_robot_input, torch.tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
-
-        #         print(f'robot action: {test_action_r.item()} | human action: {test_action_h.item()} | reward: {round(disc_reward.item(), 2)}')
-        #         print('=' * 100)
-        # print(f'robot policy dist: {test_action_r_dist} | human dist: {test_action_h_dist}')
 
     def model_loader(self, path):
         for i in range(self.n_agents):

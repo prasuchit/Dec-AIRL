@@ -78,7 +78,10 @@ from stable_baselines3.common.torch_layers import (
 from stable_baselines3.common.type_aliases import Schedule
 
 import sys
-sys.path.append(os.getcwd() + f'/airl-ppo/')
+path = os.path.dirname (os.path.realpath (__file__))
+PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
+
+sys.path.append(PACKAGE_PATH)
 from utils import normalize
 from algo.ppo.ActorCritic import OnPolicyAlgorithm_Dec, ActorCriticPolicy_Dec
 

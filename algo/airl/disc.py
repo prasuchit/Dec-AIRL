@@ -28,14 +28,6 @@ import torch.nn.functional as F
 import os
 import sys
 
-if 'airl-ppo' in os.getcwd():
-    PACKAGE_PATH = os.getcwd()
-else:
-    PACKAGE_PATH = os.getcwd() + f'/airl-ppo/'
-
-sys.path.append(PACKAGE_PATH)
-
-
 def build_mlp(input_dim, output_dim, hidden_units=[64, 64],
               hidden_activation=nn.Tanh(), output_activation=None):
     layers = []

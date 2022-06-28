@@ -37,7 +37,7 @@ from datetime import datetime
 from stable_baselines3.common.utils import obs_as_tensor
 from algo.ppo.ActorCritic import *
 from algo.ppo.ppo import *
-from algo.airl.Disc import AIRLDiscrimMultiAgent
+from algo.airl.disc import AIRLDiscrimMultiAgent
 
 ''' Adversarial IRL class that extends the original paper Fu et al. 2017(https://arxiv.org/pdf/1710.11248.pdf) to work with multiple agents'''
 

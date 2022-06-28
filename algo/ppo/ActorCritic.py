@@ -76,7 +76,10 @@ from stable_baselines3.common.torch_layers import (
 )
 from stable_baselines3.common.type_aliases import Schedule
 
-sys.path.append(os.getcwd() + f'/airl-ppo/')
+path = os.path.dirname (os.path.realpath (__file__))
+PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
+
+sys.path.append(PACKAGE_PATH)
 from algo.ppo.Base import BaseAlgorithm_Dec
 from algo.ppo.Buffer import RolloutBuffer_Dec
 from utils import obs_as_tensor
