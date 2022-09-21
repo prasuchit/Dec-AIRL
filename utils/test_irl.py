@@ -116,7 +116,7 @@ class AIRL_Test(AIRL):
         if self.env.name == 'DecHuRoSorting':
             policy = np.zeros((self.env.nSGlobal, 1))
             for S in range(self.env.nSGlobal):
-                oloc_r, eefloc_r, pred_r, oloc_h, eefloc_h, pred_h = self.env.sGlobal2vals(S)
+                oloc_r, eefloc_r, pred_r, interact_r, oloc_h, eefloc_h, pred_h, interact_h = self.env.sGlobal2vals(S)
                 global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r], [oloc_h, eefloc_h, pred_h]])
                 global_onehot_s = self.env.check_interaction(global_onehot_s)
                 for i in range(self.n_agents):
