@@ -1,4 +1,4 @@
-# HuRo-TWIRL
+# Dec-AIRL
 
 Author: Prasanth Sengadu Suresh and Yikang Gui.
 
