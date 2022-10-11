@@ -34,17 +34,21 @@ PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 
 sys.path.append(PACKAGE_PATH)
 from algo.ppo.ppo import Dec_Train
+import shutup; shutup.please()
+
 
 ''' This file trains an RL agent(s) using Proximal Policy Optimization(PPO) for any ma-gym(https://github.com/prasuchit/ma-gym) environment '''
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
-    parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    parser.add_argument('--env', type=str, default='assistive_gym:FeedingSawyerHuman-v1', help='Provide the env')
     parser.add_argument('--training_epochs', type=int, default=100, help='Total training epochs')
+    parser.add_argument('--n_steps', type=int, default=2048, help='Total training epochs')
     args = parser.parse_args()
 
-    env_id = args.env
+    # env_id = args.env
+    env_id = 'FeedingSawyerHuman-v1'
     ppo = Dec_Train(env_id)
-    ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{env_id}')
+    ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{env_id}', n_steps=args.n_steps)
 
     ppo.save(path=f'{PACKAGE_PATH}/models/{env_id}')

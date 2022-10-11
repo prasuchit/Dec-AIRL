@@ -32,6 +32,8 @@ import argparse
 import sys
 import os
 import numpy as np
+import shutup; shutup.please()
+
 
 path = os.path.dirname (os.path.realpath (__file__))
 PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
@@ -81,7 +83,7 @@ class AIRL_Test(AIRL):
             ep_reward = 0
             while not all(test_done):
                 for i in range(self.n_agents):
-                    test_action_actor[i], _, test_action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(test_state, device=self.device).float(), deterministic=True)
+                    test_action_actor[i], _, test_action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(test_state, device=self.device).float(), deterministic=(self.device=="cpu"))
 
                 test_next_state, test_reward, test_done, test_info = self.test_env.step([act for act in test_action_actor.values()], verbose=verbose)
 
@@ -92,7 +94,7 @@ class AIRL_Test(AIRL):
                 
                 # log_probs = sum(test_action_actor_log_prob.values())
 
-                # disc_reward = self.disc.calculate_reward(test_state, torch.tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
+                # disc_reward = self.disc.calculate_reward(test_state, torch.as_tensor([int(test_done)])[None, :].float(), log_probs[:, None], torch.as_tensor(test_next_state)[None, :].float(), global_test_actions).squeeze()
 
                 # print(f'Original reward: {test_reward} | Disc reward: {round(disc_reward.item(), 3)}')
 
@@ -120,13 +122,11 @@ class AIRL_Test(AIRL):
                 global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r], [oloc_h, eefloc_h, pred_h]])
                 global_onehot_s = self.env.check_interaction(global_onehot_s)
                 for i in range(self.n_agents):
-                    action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(global_onehot_s, device=self.device).float(), deterministic=True)
+                    action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(global_onehot_s, device=self.device).float(), deterministic=(self.device=="cpu"))
                 A = self.env.vals2aGlobal(action_actor[0], action_actor[1])
                 policy[S] = A
             policy_path = PACKAGE_PATH + '/saved_policies/'
             np.savetxt(policy_path+"learned_policy.csv", policy)
-
-
 
 
 if __name__ == '__main__':

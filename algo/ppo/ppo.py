@@ -25,6 +25,7 @@
 ''' PPO is imported from stable-baselines3 and adjusted to work with our algorithm. '''
 
 from copy import copy
+from re import A
 import gym
 from gym import spaces
 import os
@@ -32,7 +33,7 @@ import torch as th
 from torch.nn import functional as F
 from datetime import datetime
 import numpy as np
-import time
+import time, importlib
 import warnings
 from typing import Any, Dict, Optional, Type, Union
 
@@ -85,22 +86,20 @@ sys.path.append(PACKAGE_PATH)
 from utils import normalize
 from algo.ppo.ActorCritic import OnPolicyAlgorithm_Dec, ActorCriticPolicy_Dec
 
+import shutup; shutup.please()
 
 
 SEED = 1
 random.seed(SEED)
 th.manual_seed(SEED)
 np.random.seed(SEED)
-th.use_deterministic_algorithms(True)
+# th.use_deterministic_algorithms(True)
 # robot_state_EOF = 12
 
 
 def obs_as_tensor(obs, device='cpu'):
-    obs = th.tensor(obs).float().to(device)
-    if len(obs.shape) == 2:
-        return obs[None, :]
-    elif len(obs.shape) == 3:
-        return obs
+    obs = th.as_tensor(obs).float().to(device)
+    return obs[None, :]
 
 class PPO_Dec(OnPolicyAlgorithm_Dec):
     """
@@ -155,7 +154,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
             self,
             policy: Union[str, Type[ActorCriticPolicy]],
             env: Union[GymEnv, str],
-            agent_id: int,
+            agent_id: str,
             learning_rate: Union[float, Schedule] = 3e-4,
             n_steps: int = 2048,
             batch_size: int = 64,
@@ -289,7 +288,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
 
-                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
+                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.local_observations, rollout_data.global_observations, actions)
                 values = values.flatten()
 
                 # Normalize advantage
@@ -354,7 +353,6 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
                 # Clip grad norm
                 th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
                 self.policy.optimizer.step()
-
             if not continue_training:
                 break
 
@@ -411,69 +409,87 @@ class Dec_Train():
         self.seed = seed
 
         # Training Env
-        self.env = gym.make(env_id)
+        if env_id == 'FeedingSawyerHuman-v1':
+            module = importlib.import_module('assistive_gym.envs')
+            env_class = getattr(module, env_id.split('-')[0] + 'Env')
+            self.env = env_class()
+        else:
+            self.env = gym.make(env_id)
         self.env.seed(seed)
 
         # Testing Env
-        self.env_test = gym.make(env_id)
+        if env_id == 'FeedingSawyerHuman-v1':
+            module = importlib.import_module('assistive_gym.envs')
+            env_class = getattr(module, env_id.split('-')[0] + 'Env')
+            self.env_test = env_class()
+        else:
+            self.env_test = gym.make(env_id)
         self.env_test.seed(seed)
 
         self.device = device
-        self.n_agents = self.env.n_agents
-        self.models = [PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in range(self.n_agents)]
+        # self.n_agents = self.env.n_agents
+        self.agents = ['robot', 'human']
+        # self.models = [PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in range(self.n_agents)]
+        self.models = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
 
     def train(self, epochs=10, n_steps=2048, path = os.getcwd()):
         obs = self.env.reset()
         for epoch in range(epochs):
-            states_rollout = []
-            next_states_rollout = []
-            actions_rollout = []
-            rewards_rollout = []
-            dones_rollout = []
-            values_rollout = []
-            log_probs_rollout = []
-            infos_rollout = []
+            states_rollout = {'robot': [], 'human': []}
+            next_states_rollout = {'robot': [], 'human': []}
+            actions_rollout = {'robot': [], 'human': []}
+            rewards_rollout = {'robot': [], 'human': []}
+            dones_rollout = {'robot': [], 'human': []}
+            values_rollout = {'robot': [], 'human': []}
+            log_probs_rollout = {'robot': [], 'human': []}
+            infos_rollout = {'robot': [], 'human': []}
 
             for step in range(n_steps):
                 with th.no_grad():
-                    actions, values, log_probs = [], [], []
-                    for agent_id in range(self.n_agents):
-                        action, value, log_prob = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device).float())
-                        actions.append(action.item())
-                        values.append(value)
-                        log_probs.append(log_prob)
+                    actions, values, log_probs = {'robot': None, 'human': None}, {'robot': None, 'human': None}, {'robot': None, 'human': None}
+                    for agent_id in self.agents:
+                        local_obs = obs[agent_id]
+                        global_obs = np.concatenate([obs['robot'], obs['human']])
+                        action, value, log_prob = self.models[agent_id].policy.forward(local_obs, global_obs)
+                        actions[agent_id] = action.squeeze().cpu().numpy()
+                        values[agent_id] = value
+                        log_probs[agent_id] = log_prob
 
                 new_obs, rewards, dones, infos = self.env.step(actions)
-                rewards = sum(rewards)
-                dones = all(dones)
 
-                states_rollout.append(obs)
-                next_states_rollout.append(new_obs)
-                actions_rollout.append(actions)
-                rewards_rollout.append(rewards)
-                dones_rollout.append(dones)
-                values_rollout.append(values)
-                log_probs_rollout.append(log_probs)
-                infos_rollout.append(infos)
+                for agent_id in self.agents:
+
+                    states_rollout[agent_id].append(obs[agent_id])
+                    next_states_rollout[agent_id].append(new_obs[agent_id])
+                    actions_rollout[agent_id].append(actions[agent_id])
+                    rewards_rollout[agent_id].append(rewards[agent_id])
+                    dones_rollout[agent_id].append(dones[agent_id])
+                    values_rollout[agent_id].append(values[agent_id])
+                    log_probs_rollout[agent_id].append(log_probs[agent_id])
+                    infos_rollout[agent_id].append(infos[agent_id])
+
+                rewards = (rewards['robot'] + rewards['human']) / 2
+                dones = dones['__all__']
 
                 if dones:
                     obs = self.env.reset()
                 else:
                     obs = new_obs
-            
-            states_rollout = np.array(states_rollout)
-            next_states_rollout = np.array(next_states_rollout)
-            actions_rollout = np.array(actions_rollout)
-            rewards_rollout = np.array(rewards_rollout)
-            dones_rollout = np.array(dones_rollout)
-            values_rollout = th.tensor(values_rollout)
-            log_probs_rollout = th.tensor(log_probs_rollout)
 
-            [self.models[i].learn(total_timesteps=10000000, states_rollout=states_rollout, next_states_rollout=next_states_rollout,
-                        actions_rollout=actions_rollout[:, i], rewards_rollout=rewards_rollout, dones_rollout=dones_rollout, values_rollout=values_rollout[:, i],
-                        log_probs_rollout=log_probs_rollout[:, i], infos_rollout=infos_rollout) for i in range(self.n_agents)]
+            for agent_id in self.agents:
+                states_rollout[agent_id] = np.array(states_rollout[agent_id])
+                next_states_rollout[agent_id] = np.array(next_states_rollout[agent_id])
+                actions_rollout[agent_id] = np.array(actions_rollout[agent_id])
+                rewards_rollout[agent_id] = np.array(rewards_rollout[agent_id])
+                dones_rollout[agent_id] = np.array(dones_rollout[agent_id])
+                values_rollout[agent_id] = th.as_tensor(values_rollout[agent_id])
+                log_probs_rollout[agent_id] = th.as_tensor(log_probs_rollout[agent_id])
 
-            print(f'epoch: {epoch} | avg length: {round(n_steps / np.sum(dones_rollout))} | avg reward: {round(np.sum(rewards_rollout) / np.sum(dones_rollout), 2)}')
+            [self.models[agent_id].learn(total_timesteps=10000000, states_rollout=states_rollout, next_states_rollout=next_states_rollout,
+                        actions_rollout=actions_rollout[agent_id], rewards_rollout=rewards_rollout[agent_id], dones_rollout=dones_rollout[agent_id], values_rollout=values_rollout[agent_id],
+                        log_probs_rollout=log_probs_rollout[agent_id], infos_rollout=infos_rollout[agent_id]) for agent_id in self.agents]
+
+            print(f'epoch: {epoch} | avg length: {round(n_steps / np.sum(dones_rollout["robot"]))} | avg reward: {round(np.sum(rewards_rollout["robot"]) / np.sum(dones_rollout["robot"]), 2)}')
             self.save(path)
     
     def test(self, test_epochs=10, load_model=False, load_path=None, env_id=None):
@@ -495,7 +511,7 @@ class Dec_Train():
                 with th.no_grad():
                     actions = []
                     for agent_id in range(self.n_agents):
-                        action, value, log_prob = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device).float(), deterministic=True)
+                        action, value, log_prob = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device).float(), deterministic=(self.device=="cpu"))
                         actions.append(action.item())
                     
                 new_obs, reward, dones, infos = self.env_test.step(actions)
@@ -514,11 +530,11 @@ class Dec_Train():
             f'mean length: {round(np.mean(test_length), 1)} | mean reward: {round(np.mean(test_rewards), 1)}')
             
     def save(self, path=os.getcwd()):
-        for agent_id in range(self.n_agents):
+        for agent_id in self.agents:
             self.models[agent_id].save(f'{path}/{agent_id}')
 
     def load(self, path):
-        for agent_id in range(self.n_agents):
+        for agent_id in self.agents:
             self.models[agent_id].set_parameters(f'{path}/{agent_id}')
 
 

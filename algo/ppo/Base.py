@@ -270,6 +270,7 @@ class BaseAlgorithm_Dec(ABC):
         self,
         policy: Type[BasePolicy],
         env: Union[GymEnv, str, None],
+        agent_id,
         policy_base: Type[BasePolicy],
         learning_rate: Union[float, Schedule],
         policy_kwargs: Optional[Dict[str, Any]] = None,
@@ -299,7 +300,6 @@ class BaseAlgorithm_Dec(ABC):
         self._vec_normalize_env = unwrap_vec_normalize(env)
         self.verbose = verbose
         self.policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-        self.observation_space = None  # type: Optional[gym.spaces.Space]
         self.action_space = None  # type: Optional[gym.spaces.Space]
         self.n_envs = None
         self.num_timesteps = 0
@@ -313,7 +313,8 @@ class BaseAlgorithm_Dec(ABC):
         self.learning_rate = learning_rate
         self.tensorboard_log = tensorboard_log
         self.lr_schedule = None  # type: Optional[Schedule]
-        self._last_obs = None  # type: Optional[Union[np.ndarray, Dict[str, np.ndarray]]]
+        self._last_local_obs = None,
+        self._last_global_obs = None,
         self._last_episode_starts = None  # type: Optional[np.ndarray]
         # When using VecNormalize:
         self._last_original_obs = None  # type: Optional[Union[np.ndarray, Dict[str, np.ndarray]]]
@@ -344,8 +345,9 @@ class BaseAlgorithm_Dec(ABC):
             # env = self._wrap_env(env, self.verbose, monitor_wrapper)
             self.n_envs = 1
 
-            self.observation_space = env.observation_space
-            self.action_space = env.action_space
+            self.local_observation_space = getattr(env,'observation_space_' + agent_id)
+            self.global_observation_space = env.observation_space
+            self.action_space = getattr(env, 'action_space_' + agent_id)
             # self.n_envs = env.num_envs
             self.env = env
 

@@ -34,7 +34,7 @@ from buffer import Buffer
 
 
 def obs_as_tensor(obs, device='cpu'):
-    obs = th.tensor(obs).float().to(device)
+    obs = th.as_tensor(obs).float().to(device)
     if len(obs.shape) == 2:
         return obs[None, :]
     elif len(obs.shape) == 3:

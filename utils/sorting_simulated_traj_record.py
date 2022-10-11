@@ -77,56 +77,56 @@ for step in tqdm(range(total_timesteps)):
         # Independent states
         ##### ROBOT ########
         if oloc_r == pred_r == 0:   # Unknown
-            actions_r = torch.tensor(1) # Detect
+            actions_r = torch.as_tensor(1) # Detect
         elif oloc_r == 1 and pred_r != 0 and eefloc_r != 1: # onion onconv, eef not onconv, pred known
-            actions_r = torch.tensor(2) # Pick
+            actions_r = torch.as_tensor(2) # Pick
         elif oloc_r == eefloc_r == 3 and pred_r == 2:   # Athome, good
-            actions_r = torch.tensor(3) # Inspect
+            actions_r = torch.as_tensor(3) # Inspect
         elif oloc_r == eefloc_r == 2 and pred_r == 2:   # Infront, good
-            actions_r = torch.tensor(4) # Placeonconv
+            actions_r = torch.as_tensor(4) # Placeonconv
         elif oloc_r == eefloc_r == 3 and pred_r == 1:   # Athome, bad
-            actions_r = torch.tensor(5) # Placeinbin
+            actions_r = torch.as_tensor(5) # Placeinbin
         elif oloc_r == eefloc_r == 2 and pred_r == 1:   # Infront, bad
-            actions_r = torch.tensor(5) # Placeinbin
+            actions_r = torch.as_tensor(5) # Placeinbin
         ##### HUMAN ########
         if oloc_h == pred_h == 0:   # Unknown
-            actions_h = torch.tensor(1) # Detect
+            actions_h = torch.as_tensor(1) # Detect
         elif oloc_h == 1 and pred_h != 0 and eefloc_h != 1: # onion onconv, eef not onconv, pred known
-            actions_h = torch.tensor(2) # Pick
+            actions_h = torch.as_tensor(2) # Pick
         elif oloc_h == eefloc_h == 3 and pred_h == 2:   # Athome, good
-            actions_h = torch.tensor(3) # Inspect
+            actions_h = torch.as_tensor(3) # Inspect
         elif oloc_h == eefloc_h == 2 and pred_h == 2:   # Infront, good
-            actions_h = torch.tensor(4) # Placeonconv
+            actions_h = torch.as_tensor(4) # Placeonconv
         elif oloc_h == eefloc_h == 3 and pred_h == 1:   # Athome, bad
-            actions_h = torch.tensor(5) # Placeinbin
+            actions_h = torch.as_tensor(5) # Placeinbin
         elif oloc_h == eefloc_h == 2 and pred_h == 1:   # Infront, bad
-            actions_h = torch.tensor(5) # Placeinbin
+            actions_h = torch.as_tensor(5) # Placeinbin
         
         # Interaction states
         ###### JOINT ACTIONS ######
         if not failure_traj:
             if oloc_r == pred_r == oloc_h == pred_h == 0:   # Both unknown
-                actions_r = torch.tensor(0) # Noop
-                actions_h = torch.tensor(1) # Detect
+                actions_r = torch.as_tensor(0) # Noop
+                actions_h = torch.as_tensor(1) # Detect
             elif oloc_r == oloc_h == 1 and (pred_r != 0 and pred_h != 0) and (eefloc_r != 1 and eefloc_h != 1): # Both onion on conv
-                actions_r = torch.tensor(0) # Noop
-                actions_h = torch.tensor(2) # Pick
+                actions_r = torch.as_tensor(0) # Noop
+                actions_h = torch.as_tensor(2) # Pick
             elif oloc_r == eefloc_r == oloc_h == eefloc_h == 2 and (pred_r == pred_h == 2): # Both infront, good
-                actions_r = torch.tensor(0) # Noop
-                actions_h = torch.tensor(4) # Placeonconv
+                actions_r = torch.as_tensor(0) # Noop
+                actions_h = torch.as_tensor(4) # Placeonconv
         else:
             if oloc_r == pred_r == oloc_h == pred_h == 0:   # Both unknown
-                actions_r = torch.tensor(1) # Detect
-                actions_h = torch.tensor(1) # Detect
+                actions_r = torch.as_tensor(1) # Detect
+                actions_h = torch.as_tensor(1) # Detect
             elif oloc_r == oloc_h == 1 and (pred_r != 0 and pred_h != 0) and (eefloc_r != 1 and eefloc_h != 1): # Both onion on conv
-                actions_r = torch.tensor(2) # Pick
-                actions_h = torch.tensor(2) # Pick
+                actions_r = torch.as_tensor(2) # Pick
+                actions_h = torch.as_tensor(2) # Pick
             elif oloc_r == eefloc_r == oloc_h == eefloc_h == 2 and (pred_r == pred_h == 2): # Both infront, good
-                actions_r = torch.tensor(4) # Placeonconv
-                actions_h = torch.tensor(4) # Placeonconv
+                actions_r = torch.as_tensor(4) # Placeonconv
+                actions_h = torch.as_tensor(4) # Placeonconv
             elif oloc_r == eefloc_r == oloc_h == eefloc_h == 3 and (pred_r == pred_h == 2): # Both athome, good
-                actions_r = torch.tensor(4) # Placeonconv
-                actions_h = torch.tensor(4) # Placeonconv
+                actions_r = torch.as_tensor(4) # Placeonconv
+                actions_h = torch.as_tensor(4) # Placeonconv
 
         assert actions_r != None, f"Check the exception oloc_r: {OLOC[oloc_r]}, eefloc_r: {EEFLOC[eefloc_r]}, pred_r: {PRED[pred_r]}, actions_r: {ACTIONS[actions_r]}"
         assert actions_h != None, f"Check the exception oloc_h: {OLOC[oloc_h]}, eefloc_r: {EEFLOC[eefloc_h]}, pred_r: {PRED[pred_h]}, actions_h: {ACTIONS[actions_h]}"
@@ -162,11 +162,11 @@ for step in tqdm(range(total_timesteps)):
         length += 1
         reward += rewards
         
-states_rollout = torch.tensor(states_rollout).float()
-next_states_rollout = torch.tensor(next_states_rollout).float()
-actions_rollout = torch.tensor(actions_rollout).float()
-rewards_rollout = torch.tensor(rewards_rollout).float()
-dones_rollout = torch.tensor(dones_rollout).float()
+states_rollout = torch.as_tensor(states_rollout).float()
+next_states_rollout = torch.as_tensor(next_states_rollout).float()
+actions_rollout = torch.as_tensor(actions_rollout).float()
+rewards_rollout = torch.as_tensor(rewards_rollout).float()
+dones_rollout = torch.as_tensor(dones_rollout).float()
 
 trajectories = {
 'state': states_rollout,

@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+from glob import glob
+from threading import local
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -29,6 +31,8 @@ from typing import Any, Dict, Generator, List, Optional, Union
 import numpy as np
 import torch as th
 from gym import spaces
+from typing import Any, Callable, Dict, List, NamedTuple, Tuple, Union
+
 
 from stable_baselines3.common.type_aliases import (
     DictReplayBufferSamples,
@@ -43,6 +47,16 @@ try:
     import psutil
 except ImportError:
     psutil = None
+
+
+class RolloutBufferSamples_Dec(NamedTuple):
+    local_observations: th.as_tensor
+    global_observations: th.as_tensor
+    actions: th.as_tensor
+    old_values: th.as_tensor
+    old_log_prob: th.as_tensor
+    advantages: th.as_tensor
+    returns: th.as_tensor
 
 
 class BaseBuffer_Dec(ABC):
@@ -60,24 +74,28 @@ class BaseBuffer_Dec(ABC):
     def __init__(
         self,
         buffer_size: int,
-        observation_space: spaces.Space,
+        local_observation_space: spaces.Space,
+        global_observation_space,
         action_space: spaces.Space,
         device: Union[th.device, str] = "cpu",
         n_envs: int = 1,
     ):
         super(BaseBuffer_Dec, self).__init__()
         self.buffer_size = buffer_size
-        self.observation_space = observation_space
+        self.local_observation_space = local_observation_space
+        self.global_observation_space = global_observation_space
         self.action_space = action_space
 
-        assert type(observation_space).__name__ == 'MultiAgentObservationSpace'
-        self.obs_shape = (len(observation_space), observation_space[0].shape[0])
+        # assert type(observation_space).__name__ == 'MultiAgentObservationSpace'
+        # self.obs_shape = (len(observation_space), observation_space[0].shape[0])
+        self.local_obs_shape = local_observation_space.shape[0]
+        self.global_obs_shape = global_observation_space.shape[0]
 
-        assert type(action_space).__name__ == 'MultiAgentActionSpace'
-        if type(action_space[0]).__name__ == 'Discrete':
-            self.action_dim = 1
-        elif type(action_space[0]).__name__ == 'Box':
-            self.action_dim = action_space[0].shape[0]
+        # assert type(action_space).__name__ == 'MultiAgentActionSpace'
+        # if type(action_space[0]).__name__ == 'Discrete':
+        #     self.action_dim = 1
+        # elif type(action_space[0]).__name__ == 'Box':
+        self.action_dim = action_space.shape[0]
 
         self.pos = 0
         self.full = False
@@ -150,7 +168,7 @@ class BaseBuffer_Dec(ABC):
         """
         raise NotImplementedError()
 
-    def to_torch(self, array: np.ndarray, copy: bool = True) -> th.Tensor:
+    def to_torch(self, array: np.ndarray, copy: bool = True) -> th.as_tensor:
         """
         Convert a numpy array to a PyTorch tensor.
         Note: it copies the data by default
@@ -161,7 +179,7 @@ class BaseBuffer_Dec(ABC):
         :return:
         """
         if copy:
-            return th.tensor(array).to(self.device)
+            return th.as_tensor(array).to(self.device)
         return th.as_tensor(array).to(self.device)
 
     @staticmethod
@@ -206,7 +224,8 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
     def __init__(
         self,
         buffer_size: int,
-        observation_space: spaces.Space,
+        local_observation_space: spaces.Space,
+        global_observation_space,
         action_space: spaces.Space,
         device: Union[th.device, str] = "cpu",
         gae_lambda: float = 1,
@@ -214,17 +233,18 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         n_envs: int = 1,
     ):
 
-        super(RolloutBuffer_Dec, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
+        super(RolloutBuffer_Dec, self).__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, n_envs=n_envs)
         self.gae_lambda = gae_lambda
         self.gamma = gamma
-        self.observations, self.actions, self.rewards, self.advantages = None, None, None, None
+        self.local_observations, self.global_observations, self.actions, self.rewards, self.advantages = None, None, None, None, None
         self.returns, self.episode_starts, self.values, self.log_probs = None, None, None, None
         self.generator_ready = False
         self.reset()
 
     def reset(self) -> None:
 
-        self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32)
+        self.local_observations = np.zeros((self.buffer_size, self.n_envs, self.local_obs_shape), dtype=np.float32)
+        self.global_observations = np.zeros((self.buffer_size, self.n_envs, self.global_obs_shape), dtype=np.float32)
         self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.returns = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
@@ -235,7 +255,7 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         self.generator_ready = False
         super(RolloutBuffer_Dec, self).reset()
 
-    def compute_returns_and_advantage(self, last_values: th.Tensor, dones: np.ndarray) -> None:
+    def compute_returns_and_advantage(self, last_values: th.as_tensor, dones: np.ndarray) -> None:
         """
         Post-processing step: compute the lambda-return (TD(lambda) estimate)
         and GAE(lambda) advantage.
@@ -275,12 +295,13 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
 
     def add(
         self,
-        obs: np.ndarray,
+        local_obs: np.ndarray,
+        global_obs,
         action: np.ndarray,
         reward: np.ndarray,
         episode_start: np.ndarray,
-        value: th.Tensor,
-        log_prob: th.Tensor,
+        value: th.as_tensor,
+        log_prob: th.as_tensor,
     ) -> None:
         """
         :param obs: Observation
@@ -301,7 +322,8 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         # if isinstance(self.observation_space, spaces.Discrete):
         #     obs = obs.reshape((self.n_envs,) + self.obs_shape)
 
-        self.observations[self.pos] = np.array(obs).copy()
+        self.local_observations[self.pos] = np.array(local_obs).copy()
+        self.global_observations[self.pos] = np.array(global_obs).copy()
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
         self.episode_starts[self.pos] = np.array(episode_start).copy()
@@ -318,7 +340,8 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         if not self.generator_ready:
 
             _tensor_names = [
-                "observations",
+                "local_observations",
+                "global_observations",
                 "actions",
                 "values",
                 "log_probs",
@@ -341,11 +364,12 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
 
     def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> RolloutBufferSamples:
         data = (
-            self.observations[batch_inds],
+            self.local_observations[batch_inds],
+            self.global_observations[batch_inds],
             self.actions[batch_inds],
             self.values[batch_inds].flatten(),
             self.log_probs[batch_inds].flatten(),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
         )
-        return RolloutBufferSamples(*tuple(map(self.to_torch, data)))
+        return RolloutBufferSamples_Dec(*tuple(map(self.to_torch, data)))

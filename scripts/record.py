@@ -44,13 +44,13 @@ class Record(Dec_Train):
     
     def record(self, num_steps=10000):
         obs = self.env.reset()
-
-        states_rollout = []
-        next_states_rollout = []
-        actions_rollout = []
-        rewards_rollout = []
-        dones_rollout = []
-        infos_rollout = []
+        # print(np.concatenate(list(obs.values())))
+        states_rollout = {'robot': [], 'human': []}
+        next_states_rollout = {'robot': [], 'human': []}
+        actions_rollout = {'robot': [], 'human': []}
+        rewards_rollout = {'robot': [], 'human': []}
+        dones_rollout = {'robot': [], 'human': []}
+        infos_rollout = {'robot': [], 'human': []}
 
         length_stats = []
         reward_stats = []
@@ -60,24 +60,35 @@ class Record(Dec_Train):
 
         for step in tqdm(range(num_steps)):
             with torch.no_grad():
-                actions = []
-                for agent_id in range(self.n_agents):
-                    action, _, _ = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device), deterministic=True)
-                    actions.append(action.item())
+                actions, agents = {'robot': None, 'human': None}, ['robot','human']
+                # for agent_id in range(self.n_agents):
+                for agent_id in agents:
+                    local_obs = obs[agent_id]
+                    global_obs = np.concatenate([obs['robot'], obs['human']])
+                    action, _, _ = self.models[agent_id].policy.forward(local_obs, global_obs)
+                    actions[agent_id] = action.squeeze().cpu().numpy()
 
-            new_obs, rewards, dones, infos = self.env.step(actions, verbose=0)
+            next_obs, rewards, dones, info = self.env.step(actions)
             # print(rewards, actions, obs)
-            rewards = sum(rewards)
-            dones = all(dones)
+            action_robot = actions['robot']
+            action_human = actions['human']
+            states_rollout['robot'].append(obs['robot'])
+            states_rollout['human'].append(obs['human'])
+            next_states_rollout['robot'].append(next_obs['robot'])
+            next_states_rollout['human'].append(next_obs['human'])
+            actions_rollout['robot'].append(action_robot)
+            actions_rollout['human'].append(action_human)
+            rewards_rollout['robot'].append(rewards['robot'])
+            rewards_rollout['human'].append(rewards['human'])
+            dones_rollout['robot'].append(dones['robot'])
+            dones_rollout['human'].append(dones['human'])
+            infos_rollout['robot'].append(info['robot'])
+            infos_rollout['human'].append(info['human'])
 
-            states_rollout.append(obs)
-            next_states_rollout.append(new_obs)
-            actions_rollout.append(actions)
-            rewards_rollout.append(rewards)
-            dones_rollout.append([dones])
-            infos_rollout.append(infos)
+            rewards = (rewards['robot'] + rewards['human']) / 2
+            done = dones['__all__']
 
-            if dones:
+            if done:
                 obs = self.env.reset()
 
                 length_stats.append(length)
@@ -86,16 +97,16 @@ class Record(Dec_Train):
                 length = 0
                 reward = 0
             else:
-                obs = new_obs
+                obs = next_obs
 
                 length += 1
                 reward += rewards
                 
-        states_rollout = torch.tensor(states_rollout).float()
-        next_states_rollout = torch.tensor(next_states_rollout).float()
-        actions_rollout = torch.tensor(actions_rollout).float()
-        rewards_rollout = torch.tensor(rewards_rollout).float()
-        dones_rollout = torch.tensor(dones_rollout).float()
+        # states_rollout = {'robot': states_rollout['robot'].cpu().numpy(), 'human': states_rollout['human'].cpu().numpy()}
+        # next_states_rollout = {'robot': next_states_rollout['robot'].cpu().numpy(), 'human': next_states_rollout['human'].cpu().numpy()}
+        # actions_rollout = torch.as_tensor(actions_rollout).float()
+        # rewards_rollout = torch.as_tensor(rewards_rollout).float()
+        # dones_rollout = torch.as_tensor(dones_rollout).float()
 
         trajectories = {
         'state': states_rollout,
@@ -115,7 +126,7 @@ class Record(Dec_Train):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
-    parser.add_argument('--env', type=str, default='ma_gym:Checkers-v0', help='Provide the env')
+    parser.add_argument('--env', type=str, default='FeedingSawyerHuman-v1', help='Provide the env')
     parser.add_argument('--training_epochs', type=int, default=20, help='Total training epochs')
     args = parser.parse_args()
 
