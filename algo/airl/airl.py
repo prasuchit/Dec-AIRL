@@ -220,6 +220,13 @@ class AIRL(object):
         return buffer['state'][:current_buffer_size], buffer['action'][:current_buffer_size], buffer['next_state'][:current_buffer_size], buffer['reward'][:current_buffer_size], \
                buffer['done'][:current_buffer_size], buffer['value'][:current_buffer_size], buffer['log_prob'][:current_buffer_size], buffer['info'][:current_buffer_size]
 
+    def model_loader(self, path, only_disc = False, only_gen = False):
+        if not only_disc:
+            for i in self.agents:
+                self.actors[i].set_parameters(f'{path}/{i}.zip',  device=self.device)
+        if not only_gen:
+            self.disc.load_state_dict(torch.load(f'{path}/disc.pt'))
+
     def train(self, total_timesteps=100000):
         obs = self.env.reset()
 

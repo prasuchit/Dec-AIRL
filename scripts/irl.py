@@ -46,20 +46,27 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
-    p.add_argument('--env_id', type=str, default='ma_gym:Checkers-v0')
-    p.add_argument('--cuda', action='store_true')
+    p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
+    p.add_argument('--cuda', action='store_true', default=False)
     p.add_argument('--seed', type=int, default=1)
-    p.add_argument('--failure_traj', action='store_true')
-    p.add_argument('--load_existing', action='store_true')
-    p.add_argument('--test', action='store_true')
+    p.add_argument('--failure_traj', action='store_true', default=False)
+    p.add_argument('--load_existing', action='store_true', default=False)
+    p.add_argument('--model-path', type=str, default=f'{PACKAGE_PATH}/models_airl/')
     args = p.parse_args()
 
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
 
+    args.model_path = args.model_path + env_id + '/2022-10-10_18-23/step_249856_reward_75'    # NOTE: Modify this if you're loading an existing model!
+
     buffers_exp = torch.load(f'{PACKAGE_PATH}/buffers/{env_id}/data.pt')
 
-    save_dir = f'{PACKAGE_PATH}/models_airl/' + datetime.now().strftime('%Y-%m-%d_%H-%M')
+    save_dir = f'{PACKAGE_PATH}/models_airl/{env_id}/' + datetime.now().strftime('%Y-%m-%d_%H-%M')
 
-    airl = AIRL(env_id=env_id, buffers_exp=buffers_exp, device=device, seed=args.seed, eval_interval=args.eval_interval, path = save_dir)
-    airl.train()
+    airl = AIRL(env_id=env_id, buffers_exp=buffers_exp, device=device, seed=args.seed, eval_interval=args.eval_interval, 
+                path = save_dir, units_disc_r = (128, 128), units_disc_v = (128, 128))
+
+    if args.load_existing:
+        airl.model_loader(args.model_path, only_disc = False, only_gen = False)
+
+    airl.train(total_timesteps=args.num_steps)

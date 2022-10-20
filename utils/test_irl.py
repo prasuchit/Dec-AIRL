@@ -136,18 +136,17 @@ if __name__ == '__main__':
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
     p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
-    p.add_argument('--cuda', action='store_true')
+    p.add_argument('--cuda', action='store_true', default=False)
     p.add_argument('--seed', type=int, default=1)
-    p.add_argument('--failure_traj', action='store_true')
-    p.add_argument('--load_existing', action='store_true')
-    p.add_argument('--test', action='store_true')
+    p.add_argument('--failure_traj', action='store_true', default=False)
+    p.add_argument('--load_existing', action='store_true', default=False)
     p.add_argument('--model_path', type=str, default='2022-06-07_17-20/step_65536_reward_151')
     args = p.parse_args()
 
     env_id = args.env_id
     device = 'cuda:0' if args.cuda else 'cpu'
 
-    load_dir = f'{PACKAGE_PATH}/models_airl/' + args.model_path
+    load_dir = f'{PACKAGE_PATH}/models_airl/{env_id}/' + args.model_path
 
     airl = AIRL_Test(env_id=env_id, device=device, seed=args.seed)
     airl.save_discrete_policy(path = load_dir)
