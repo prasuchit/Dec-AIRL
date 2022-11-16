@@ -35,6 +35,7 @@ import numpy as np
 
 from datetime import datetime
 from stable_baselines3.common.utils import obs_as_tensor
+sys.path.append('Dec-AIRL/')
 from algo.ppo.ActorCritic import *
 from algo.ppo.ppo import *
 from algo.airl.disc import AIRLDiscrimMultiAgent

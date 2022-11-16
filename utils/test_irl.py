@@ -26,7 +26,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.optim import Adam
-
+from tqdm import tqdm
 import gym
 import argparse
 import sys
@@ -60,10 +60,12 @@ class AIRL_Test(AIRL):
     def test_disc(self, path):
         raise NotImplementedError
 
-    def model_loader(self, path):
+    def model_loader(self, path, nodisc=False):
         for i in range(self.n_agents):
             self.actors[i].set_parameters(f'{path}/{i}.zip',  device=self.device)
-        self.disc.load_state_dict(torch.load(f'{path}/disc.pt'))
+        if nodisc:
+            pass
+        else: self.disc.load_state_dict(torch.load(f'{path}/disc.pt'))
 
     def test(self, path, test_epochs = 1):
         ep_rewards = []
@@ -108,23 +110,44 @@ class AIRL_Test(AIRL):
         print(f'mean length: {round(np.mean(ep_lengths), 1)} | mean reward: {round(np.mean(ep_rewards), 1)}')
         return np.mean(ep_rewards)
     
-    def save_discrete_policy(self, path):
+    def save_discrete_policy(self, path, nodisc = False):
         global PACKAGE_PATH
-        self.model_loader(path)
+        self.model_loader(path, nodisc=nodisc)
         action_actor = {}
         action_actor_log_prob = {}
+        n_interact = self.env.nInteract
         if self.env.name == 'DecHuRoSorting':
-            policy = np.zeros((self.env.nSGlobal, 1))
-            for S in range(self.env.nSGlobal):
+            # policy_r = np.zeros((self.env.nSAgent*n_interact, 1))
+            # policy_h = np.zeros((self.env.nSAgent*n_interact, 1))
+            global_policy = np.zeros((self.env.nSGlobal, 1))
+            for S in tqdm(range(self.env.nSGlobal)):
                 oloc_r, eefloc_r, pred_r, interact_r, oloc_h, eefloc_h, pred_h, interact_h = self.env.sGlobal2vals(S)
                 global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r], [oloc_h, eefloc_h, pred_h]])
                 global_onehot_s = self.env.check_interaction(global_onehot_s)
                 for i in range(self.n_agents):
                     action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(global_onehot_s, device=self.device).float(), deterministic=True)
                 A = self.env.vals2aGlobal(action_actor[0], action_actor[1])
-                policy[S] = A
+                s_r = self.env.vals2sid_interact([oloc_r, eefloc_r, pred_r, interact_r])
+                s_h = self.env.vals2sid_interact([oloc_h, eefloc_h, pred_h, interact_h])
+                if s_r == 77:
+                    oloc_r_, eefloc_r_, pred_r_ = self.env.get_state_meanings(oloc_r, eefloc_r, pred_r)
+                    oloc_h_, eefloc_h_, pred_h_ = self.env.get_state_meanings(oloc_h, eefloc_h, pred_h)
+                    a_r_ = self.env.get_action_meanings(action_actor[0].item())
+                    a_h_ = self.env.get_action_meanings(action_actor[1].item())
+                    print(f"Robot state: Onion: {oloc_r_}, Eef: {eefloc_r_}, Pred: {pred_r_}, Interaction: {bool(interact_r)};\nRobot action: {a_r_};")
+                    print(f"Human state: Onion: {oloc_h_}, Eef: {eefloc_h_}, Pred: {pred_h_}, Interaction: {bool(interact_h)};\nHuman action: {a_h_};")
+                # policy_r[s_r] = action_actor[0].item()
+                # policy_h[s_h] = action_actor[1].item()
+                global_policy[S] = A
             policy_path = PACKAGE_PATH + '/saved_policies/'
-            np.savetxt(policy_path+"learned_policy.csv", policy)
+            np.savetxt(policy_path+"learned_policy_global.csv", global_policy)
+            # np.savetxt(policy_path+"learned_policy_rob.csv", policy_r)
+            # np.savetxt(policy_path+"learned_policy_hum.csv", policy_h)
+            '''NOTE: Here we're saving the global policy because for instance, the same robot state will recur with other human states which may sometimes be 
+            invalid states (eg: Robot state: Onion: OnConveyor, Eef: AtHome, Pred: Bad, Interaction: True; 
+                                Human state: Onion: Unknown, Eef: InBin, Pred: Unknown, Interaction: False;).
+            This would lead to overwriting the robot action for that state with undesirable values. But when the global state is considered, it is unique.
+            The policies are however trained by decentralized agents, so it shouldn't matter.'''
 
 
 
@@ -140,14 +163,17 @@ if __name__ == '__main__':
     p.add_argument('--seed', type=int, default=1)
     p.add_argument('--failure_traj', action='store_true', default=False)
     p.add_argument('--load_existing', action='store_true', default=False)
-    p.add_argument('--model_path', type=str, default='2022-06-07_17-20/step_65536_reward_151')
+    p.add_argument('--model_path', type=str, default='2022-10-20_15-40/step_1597440_reward_177')
     args = p.parse_args()
 
     env_id = args.env_id
+
+    load_env_id = env_id.replace(':', '_')
+
     device = 'cuda:0' if args.cuda else 'cpu'
 
-    load_dir = f'{PACKAGE_PATH}/models_airl/{env_id}/' + args.model_path
+    load_dir = f'{PACKAGE_PATH}/models_airl/{load_env_id}/' + args.model_path
 
-    airl = AIRL_Test(env_id=env_id, device=device, seed=args.seed)
+    airl = AIRL_Test(env_id=env_id, device=device, seed=args.seed, units_disc_r = (128, 128), units_disc_v = (128, 128))
     airl.save_discrete_policy(path = load_dir)
     # airl.test(path=load_dir)
