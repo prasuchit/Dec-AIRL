@@ -44,7 +44,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     env_id = args.env
+    save_env_id = env_id.replace(":", "_")
     ppo = Dec_Train(env_id)
-    ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{env_id}')
-
-    ppo.save(path=f'{PACKAGE_PATH}/models/{env_id}')
+    ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+    ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
