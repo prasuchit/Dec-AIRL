@@ -47,54 +47,50 @@ class Test(Dec_Train):
 
         # # obs = self.env.reset()
 
-        # s_list = [1,3,1,1]
-        # oloc, eefloc, pred = self.env.get_state_meanings(s_list[0], s_list[1], s_list[2])
+        # s_id_rob = self.env.vals2sid_interact([2, 2, 2, 0])
+        # s_id_hum = self.env.vals2sid_interact([2, 2, 1, 0])
 
-        # s_id = self.env.vals2sid(s_list)
-
-        s_id_rob = self.env.vals2sid_interact([2, 2, 2, 0])
-        s_id_hum = self.env.vals2sid_interact([2, 2, 1, 0])
-
-        oloc_r, eefloc_r, pred_r, inter_r = self.env.sid2vals_interact(s_id_rob)
-        oloc_h, eefloc_h, pred_h, inter_h = self.env.sid2vals_interact(s_id_hum)
+        # oloc_r, eefloc_r, pred_r, inter_r = self.env.sid2vals_interact(s_id_rob)
+        # oloc_h, eefloc_h, pred_h, inter_h = self.env.sid2vals_interact(s_id_hum)
         
-        obs = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r, inter_r], [oloc_h, eefloc_h, pred_h, inter_h]])
+        # obs = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r, inter_r], [oloc_h, eefloc_h, pred_h, inter_h]])
 
-        self.env.set_prev_obsv(0, s_id_rob)
-        self.env.set_prev_obsv(1, s_id_hum)
-        self.env._step_count = 0
-        self.env.reward = self.env.step_cost
+        # self.env.set_prev_obsv(0, s_id_rob)
+        # self.env.set_prev_obsv(1, s_id_hum)
+        # self.env._step_count = 0
+        # self.env.reward = self.env.step_cost
 
-        self.env._agent_dones = False
-        self.env.steps_beyond_done = None
+        # self.env._agent_dones = False
+        # self.env.steps_beyond_done = None
 
-        with torch.no_grad():
-            actions = []
-            for agent_id in range(self.n_agents):
-                action, _, _ = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device), deterministic=True)
-                actions.append(action.item())
-        rob_act = self.env.get_action_meanings(actions[0])
-        hum_act = self.env.get_action_meanings(actions[1])
-        print(f"Robot state: Onion: {oloc_r}, Eef: {eefloc_r}, Pred: {pred_r}, Interaction: {bool(inter_r)};\nRobot action: {rob_act};")
-        print(f"Human state: Onion: {oloc_h}, Eef: {eefloc_h}, Pred: {pred_h}, Interaction: {bool(inter_h)};\nHuman action: {hum_act};")
-        new_obs, rewards, dones, infos = self.env.step(actions, verbose=0)
-        # rewards = sum(rewards)
-        dones = all(dones)
-        print(f"Reward: {rewards}")
-
-        # print("Saving learned policies...")
-
-        # test_irl = AIRL_Test(env_id)
-
-        # load_dir = f'{PACKAGE_PATH}/models/{env_id}/'
-
-        # test_irl.save_discrete_policy(path=load_dir, nodisc=True)
+        # with torch.no_grad():
+        #     actions = []
+        #     for agent_id in range(self.n_agents):
+        #         action, _, _ = self.models[agent_id].policy.forward(obs_as_tensor(obs, device=self.device), deterministic=True)
+        #         actions.append(action.item())
+        # rob_act = self.env.get_action_meanings(actions[0])
+        # hum_act = self.env.get_action_meanings(actions[1])
+        # print(f"Robot state: Onion: {oloc_r}, Eef: {eefloc_r}, Pred: {pred_r}, Interaction: {bool(inter_r)};\nRobot action: {rob_act};")
+        # print(f"Human state: Onion: {oloc_h}, Eef: {eefloc_h}, Pred: {pred_h}, Interaction: {bool(inter_h)};\nHuman action: {hum_act};")
+        # new_obs, rewards, dones, infos = self.env.step(actions, verbose=0)
+        # # rewards = sum(rewards)
+        # dones = all(dones)
+        # print(f"Reward: {rewards}")
         # if dones:
         #     obs = self.env.reset()
         # else:
         #     obs = new_obs
-
         # print(f'Collect Episodes: {len(length_stats)} | Avg Length: {round(np.mean(length_stats), 2)} | Avg Reward: {round(np.mean(reward_stats), 2)}')    
+
+        print("Saving learned policies...")
+
+        test_irl = AIRL_Test(env_id)
+        
+        load_env_id = env_id.replace(":", "_")
+
+        load_dir = f'{PACKAGE_PATH}/models/{load_env_id}/'
+
+        test_irl.save_discrete_policy(path=load_dir, nodisc=True)
 
 
 if __name__ == '__main__':

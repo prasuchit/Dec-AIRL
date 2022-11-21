@@ -115,39 +115,32 @@ class AIRL_Test(AIRL):
         self.model_loader(path, nodisc=nodisc)
         action_actor = {}
         action_actor_log_prob = {}
-        n_interact = self.env.nInteract
         if self.env.name == 'DecHuRoSorting':
-            # policy_r = np.zeros((self.env.nSAgent*n_interact, 1))
-            # policy_h = np.zeros((self.env.nSAgent*n_interact, 1))
-            global_policy = np.zeros((self.env.nSGlobal, 1))
+            policy_r = np.zeros((self.env.nSAgent, 1))
+            policy_h = np.zeros((self.env.nSAgent, 1))
+            # global_policy = np.zeros((self.env.nSGlobal, 1))
             for S in tqdm(range(self.env.nSGlobal)):
                 oloc_r, eefloc_r, pred_r, interact_r, oloc_h, eefloc_h, pred_h, interact_h = self.env.sGlobal2vals(S)
-                global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r], [oloc_h, eefloc_h, pred_h]])
-                global_onehot_s = self.env.check_interaction(global_onehot_s)
+                global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r, interact_r], [oloc_h, eefloc_h, pred_h, interact_h]])
                 for i in range(self.n_agents):
                     action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(global_onehot_s, device=self.device).float(), deterministic=True)
                 A = self.env.vals2aGlobal(action_actor[0], action_actor[1])
                 s_r = self.env.vals2sid_interact([oloc_r, eefloc_r, pred_r, interact_r])
                 s_h = self.env.vals2sid_interact([oloc_h, eefloc_h, pred_h, interact_h])
-                if s_r == 77:
-                    oloc_r_, eefloc_r_, pred_r_ = self.env.get_state_meanings(oloc_r, eefloc_r, pred_r)
-                    oloc_h_, eefloc_h_, pred_h_ = self.env.get_state_meanings(oloc_h, eefloc_h, pred_h)
-                    a_r_ = self.env.get_action_meanings(action_actor[0].item())
-                    a_h_ = self.env.get_action_meanings(action_actor[1].item())
-                    print(f"Robot state: Onion: {oloc_r_}, Eef: {eefloc_r_}, Pred: {pred_r_}, Interaction: {bool(interact_r)};\nRobot action: {a_r_};")
-                    print(f"Human state: Onion: {oloc_h_}, Eef: {eefloc_h_}, Pred: {pred_h_}, Interaction: {bool(interact_h)};\nHuman action: {a_h_};")
-                # policy_r[s_r] = action_actor[0].item()
-                # policy_h[s_h] = action_actor[1].item()
-                global_policy[S] = A
+                # if interact_r == interact_h == 1:
+                #     oloc_r_, eefloc_r_, pred_r_, inter_r_ = self.env.get_state_meanings(oloc_r, eefloc_r, pred_r, interact_r)
+                #     oloc_h_, eefloc_h_, pred_h_, inter_h_ = self.env.get_state_meanings(oloc_h, eefloc_h, pred_h, interact_h)
+                #     a_r_ = self.env.get_action_meanings(action_actor[0].item())
+                #     a_h_ = self.env.get_action_meanings(action_actor[1].item())
+                #     print(f"Robot state: Onion: {oloc_r_}, Eef: {eefloc_r_}, Pred: {pred_r_}, Interaction: {inter_r_};\nRobot action: {a_r_};")
+                #     print(f"Human state: Onion: {oloc_h_}, Eef: {eefloc_h_}, Pred: {pred_h_}, Interaction: {inter_h_};\nHuman action: {a_h_};")
+                policy_r[s_r] = action_actor[0].item()
+                policy_h[s_h] = action_actor[1].item()
+                # global_policy[S] = A
             policy_path = PACKAGE_PATH + '/saved_policies/'
-            np.savetxt(policy_path+"learned_policy_global.csv", global_policy)
-            # np.savetxt(policy_path+"learned_policy_rob.csv", policy_r)
-            # np.savetxt(policy_path+"learned_policy_hum.csv", policy_h)
-            '''NOTE: Here we're saving the global policy because for instance, the same robot state will recur with other human states which may sometimes be 
-            invalid states (eg: Robot state: Onion: OnConveyor, Eef: AtHome, Pred: Bad, Interaction: True; 
-                                Human state: Onion: Unknown, Eef: InBin, Pred: Unknown, Interaction: False;).
-            This would lead to overwriting the robot action for that state with undesirable values. But when the global state is considered, it is unique.
-            The policies are however trained by decentralized agents, so it shouldn't matter.'''
+            # np.savetxt(policy_path+"learned_policy_global.csv", global_policy)
+            np.savetxt(policy_path+"learned_policy_rob.csv", policy_r)
+            np.savetxt(policy_path+"learned_policy_hum.csv", policy_h)
 
 
 
