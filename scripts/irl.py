@@ -46,6 +46,7 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
+    # p.add_argument('--env_id', type=str, default='FeedingSawyerHuman-v1')
     p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
     p.add_argument('--cuda', action='store_true', default=False)
     p.add_argument('--seed', type=int, default=1)
@@ -55,11 +56,12 @@ if __name__ == '__main__':
     args = p.parse_args()
 
     env_id = args.env_id
+    load_env_id = env_id.replace(":", "_")
     device = 'cuda:0' if args.cuda else 'cpu'
 
-    args.model_path = args.model_path + env_id + '/2022-10-10_18-23/step_249856_reward_75'    # NOTE: Modify this if you're loading an existing model!
+    # args.model_path = args.model_path + env_id + '/2022-10-10_18-23/step_249856_reward_75'    # NOTE: Modify this if you're loading an existing model!
 
-    buffers_exp = torch.load(f'{PACKAGE_PATH}/buffers/{env_id}/data.pt')
+    buffers_exp = torch.load(f'{PACKAGE_PATH}/buffers/{load_env_id}/trajectory.pt')
 
     save_dir = f'{PACKAGE_PATH}/models_airl/{env_id}/' + datetime.now().strftime('%Y-%m-%d_%H-%M')
 

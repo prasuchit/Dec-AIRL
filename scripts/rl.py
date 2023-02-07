@@ -39,8 +39,9 @@ from algo.ppo.ppo import Dec_Train
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
-    parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
-    parser.add_argument('--training_epochs', type=int, default=100, help='Total training epochs')
+    # parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    parser.add_argument('--env', type=str, default='FeedingSawyerHuman-v1', help='Provide the env')
+    parser.add_argument('--training_epochs', type=int, default=500, help='Total training epochs')
     args = parser.parse_args()
 
     env_id = args.env
