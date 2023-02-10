@@ -64,7 +64,7 @@ assistive_gym_env_id = {
 }
 
 
-''' Adversarial IRL class that extends the original paper Fu et al. 2017(https://arxiv.org/pdf/1710.11248.pdf) to work with multiple agents'''
+''' Adversarial IRL class that extends the original paper Fu et al. 2017(https://arxiv.org/pdf/1710.11248.pdf) to work with decentralized agents'''
 
 class AIRL(object):
     def __init__(self, env_id, buffers_exp, seed, eval_interval=500,
@@ -92,21 +92,21 @@ class AIRL(object):
         else:
             # Training Env
             self.env = gym.make(env_id)
-            self.env.seed(seed)
+            self.env.seed(self.seed)
 
             # Testing Env
             self.eval_env = gym.make(env_id)
             self.assistive_gym = False
 
-        self.eval_env.seed(seed)
+        self.eval_env.seed(self.seed)
         self.device = device
         # init agents
         if self.assistive_gym:
             self.agents = ['robot', 'human']
         else:
             self.agents = list(range(self.env.n_agents))
-        self.actors = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
 
+        self.actors = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
         self.path = path
 
         # Discriminator.
@@ -340,11 +340,12 @@ class AIRL(object):
     def model_loader(self, path, only_disc = False, only_gen = False):
         if not only_disc:
             for i in self.agents:
-                self.actors[i].set_parameters(f'{path}/{i}.zip',  device=self.device)
+                self.actors[i].set_parameters(f'{path}/{i}.zip', device=self.device)
         if not only_gen:
             self.disc.load_state_dict(torch.load(f'{path}/disc.pt'))
 
     def train(self, total_timesteps=100000):
+        self.env.seed(int(time.time()))
         obs = self.env.reset()
 
         for airl_step in range(1, total_timesteps):
@@ -371,6 +372,7 @@ class AIRL(object):
             dones = any([dones[i] for i in self.agents])
 
             if dones:
+                self.env.seed(int(time.time()))
                 obs = self.env.reset()
             else:
                 obs = new_obs
@@ -394,6 +396,7 @@ class AIRL(object):
         length = 0
 
         for epoch in range(eval_epochs):
+            self.eval_env.seed(int(time.time()))
             obs = self.eval_env.reset()
             dones = False
 

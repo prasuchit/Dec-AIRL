@@ -36,7 +36,8 @@ class Trainer:
 
         # Env to collect samples.
         self.env = env
-        self.env.seed(seed)
+        self.seed = seed
+        self.env.seed(self.seed)
 
         # Env for evaluation.
         self.env_test = env_test

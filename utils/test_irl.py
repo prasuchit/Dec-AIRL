@@ -40,7 +40,7 @@ sys.path.append(PACKAGE_PATH)
 from algo.airl.airl import AIRL
 from algo.ppo.ppo import obs_as_tensor
 
-''' Adversarial IRL class that extends the original paper Fu et al. 2017(https://arxiv.org/pdf/1710.11248.pdf) to work with multiple agents'''
+''' Adversarial IRL class that extends the original paper Fu et al. 2017(https://arxiv.org/pdf/1710.11248.pdf) to work with decentralized agents'''
 
 class AIRL_Test(AIRL):
     def __init__(self, env_id, buffers_exp=None, seed=None, eval_interval=500,
@@ -57,11 +57,13 @@ class AIRL_Test(AIRL):
                  epoch_actor=epoch_actor, epoch_disc=epoch_disc, clip_eps=clip_eps, gae_lambda=gae_lambda,
                  ent_coef=ent_coef, max_grad_norm=max_grad_norm, path = path) 
 
+        self.test_env = self.eval_env   # Initiating a test env
+
     def test_disc(self, path):
         raise NotImplementedError
 
     def model_loader(self, path, nodisc=False):
-        for i in range(self.n_agents):
+        for i in self.agents:
             self.actors[i].set_parameters(f'{path}/{i}.zip',  device=self.device)
         if nodisc:
             pass
@@ -72,22 +74,32 @@ class AIRL_Test(AIRL):
         ep_lengths = []
         verbose = True
         self.model_loader(path)
-        test_action_actor = {}
-        test_action_actor_log_prob = {}
-        action_actor_onehot = {}
+        test_actions, test_values, test_log_probs = {agent_id: None for agent_id in self.agents}, {agent_id: None for agent_id in self.agents}, {agent_id: None for agent_id in self.agents}
+
+        self.test_env.render()
 
         for test_epoch in range(test_epochs):
             test_state = self.test_env.reset()
-            test_done = [False, False]
+            test_dones = False
             ep_length = 0
             ep_reward = 0
-            while not all(test_done):
-                for i in range(self.n_agents):
-                    test_action_actor[i], _, test_action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(test_state, device=self.device).float(), deterministic=True)
+            while not test_dones:
+                # for i in self.agents:
+                #     test_action_actor[i], _, test_action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(test_state, device=self.device).float(), deterministic=True)
+                for i in self.agents:
+                    local_obs = torch.as_tensor(test_state[i])
+                    global_obs = torch.as_tensor(np.concatenate([test_state[i] for i in self.agents]))
+                    test_action, test_value, test_log_prob = self.actors[i].policy.forward(local_obs, global_obs)
+                    test_actions[i] = test_action.detach().squeeze().cpu().numpy()
+                    test_values[i] = test_value
+                    test_log_probs[i] = test_log_prob
 
-                test_next_state, test_reward, test_done, test_info = self.test_env.step([act for act in test_action_actor.values()], verbose=verbose)
+                if self.assistive_gym:
+                    test_next_state, test_rewards, test_dones, test_infos = self.test_env.step(test_actions)
+                else:
+                    test_next_state, test_rewards, test_dones, test_infos = self.test_env.step([test_actions[action] for action in test_actions])
 
-                # for i in range(self.n_agents):            
+                # for i in self.agents:            
                 #     action_actor_onehot[i] = torch.nn.functional.one_hot(test_action_actor[i].long(), num_classes=6).float()
 
                 # global_test_actions = torch.cat(([act for act in action_actor_onehot.values()]), dim=1)
@@ -98,11 +110,20 @@ class AIRL_Test(AIRL):
 
                 # print(f'Original reward: {test_reward} | Disc reward: {round(disc_reward.item(), 3)}')
 
-                print(f"Reward: {test_reward}, Done: {test_done}")
+                if not self.assistive_gym:
+                    test_rewards = sum(test_rewards) / 2
+                    test_dones = all(test_dones)
+                else:
+                    test_rewards = (test_rewards['robot'] + test_rewards['human']) / 2
+                    test_dones = test_dones['__all__']
 
-                ep_reward += sum(test_reward)
-                ep_length += 1
+                print(f"Reward: {test_rewards}, Done: {test_dones}")
+                # if test_dones:
+                #     test_state = self.test_env.reset()
+                # else:
                 test_state = test_next_state
+                ep_length += 1
+                ep_reward += test_rewards
 
             ep_rewards.append(ep_reward)
             ep_lengths.append(ep_length)
@@ -122,8 +143,10 @@ class AIRL_Test(AIRL):
             for S in tqdm(range(self.env.nSGlobal)):
                 oloc_r, eefloc_r, pred_r, interact_r, oloc_h, eefloc_h, pred_h, interact_h = self.env.sGlobal2vals(S)
                 global_onehot_s = self.env.get_global_onehot([[oloc_r, eefloc_r, pred_r, interact_r], [oloc_h, eefloc_h, pred_h, interact_h]])
-                for i in range(self.n_agents):
-                    action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(obs_as_tensor(global_onehot_s, device=self.device).float(), deterministic=True)
+                for i in self.agents:
+                    local_obs = torch.as_tensor(global_onehot_s[i])
+                    global_obs = torch.as_tensor(np.concatenate([global_onehot_s[i] for i in self.agents]))
+                    action_actor[i], _, action_actor_log_prob[i] = self.actors[i].policy.forward(local_obs, global_obs)
                 A = self.env.vals2aGlobal(action_actor[0], action_actor[1])
                 s_r = self.env.vals2sid_interact([oloc_r, eefloc_r, pred_r, interact_r])
                 s_h = self.env.vals2sid_interact([oloc_h, eefloc_h, pred_h, interact_h])
@@ -151,12 +174,13 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
-    p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
+    # p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
+    p.add_argument('--env_id', type=str, default='FeedingSawyerHuman-v1')
     p.add_argument('--cuda', action='store_true', default=False)
-    p.add_argument('--seed', type=int, default=1)
+    p.add_argument('--seed', type=int, default=321)
     p.add_argument('--failure_traj', action='store_true', default=False)
     p.add_argument('--load_existing', action='store_true', default=False)
-    p.add_argument('--model_path', type=str, default='2022-10-20_15-40/step_1597440_reward_177')
+    p.add_argument('--model_path', type=str, default='2023-02-09_18-55/step_2101248_reward_134')
     args = p.parse_args()
 
     env_id = args.env_id
@@ -167,6 +191,6 @@ if __name__ == '__main__':
 
     load_dir = f'{PACKAGE_PATH}/models_airl/{load_env_id}/' + args.model_path
 
-    airl = AIRL_Test(env_id=env_id, device=device, seed=args.seed, units_disc_r = (128, 128), units_disc_v = (128, 128))
-    airl.save_discrete_policy(path = load_dir)
-    # airl.test(path=load_dir)
+    airl = AIRL_Test(env_id=env_id, seed=args.seed, device=device, units_disc_r = (128, 128), units_disc_v = (128, 128))
+    # airl.save_discrete_policy(path = load_dir)
+    airl.test(path=load_dir)

@@ -119,7 +119,7 @@ def obs_as_tensor(obs, device='cpu'):
 
 class PPO_Dec(OnPolicyAlgorithm_Dec):
     """
-    Proximal Policy Optimization algorithm (PPO) (clip version)
+    Decentralized Proximal Policy Optimization algorithm (PPO) (clip version)
     Paper: https://arxiv.org/abs/1707.06347
     Code: This implementation borrows code from OpenAI Spinning Up (https://github.com/openai/spinningup/)
     https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail and
@@ -249,6 +249,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
         #             f"Info: (n_steps={self.n_steps} and n_envs={self.env.num_envs})"
         #         )
         self.env = env
+        self.env_test = env
         self.batch_size = batch_size
         self.n_epochs = n_epochs
         self.clip_range = clip_range
@@ -433,19 +434,19 @@ class Dec_Train():
                 module = importlib.import_module('assistive_gym.envs')
                 env_class = getattr(module, env_id.split('-')[0] + 'Env')
                 self.env = env_class()
-                self.test_env = env_class()
+                self.env_test = env_class()
             else:
                 self.env = gym.make('assistive_gym:' + env_id)
-                self.test_env = gym.make('assistive_gym:' + env_id)
+                self.env_test = gym.make('assistive_gym:' + env_id)
             self.assistive_gym = True
         else:
             # Training Env
             self.env = gym.make(env_id)
-            self.env.seed(seed)
+            self.env.seed(self.seed)
 
             # Testing Env
             self.env_test = gym.make(env_id)
-            self.env_test.seed(seed)
+            self.env_test.seed(self.seed)
             self.assistive_gym = False
 
         self.device = device
@@ -458,6 +459,9 @@ class Dec_Train():
             self.models = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
 
     def train(self, epochs=10, n_steps=2048, path = os.getcwd()):
+        self.env.seed(int(time.time()))
+        ep_len = 0
+        lengths = []
         obs = self.env.reset()
         for epoch in range(epochs):
             # init custom collects
@@ -486,6 +490,8 @@ class Dec_Train():
                 else:
                     new_obs, rewards, dones, infos = self.env.step([actions[action] for action in actions])
 
+                ep_len += 1
+
                 for agent_id in self.agents:
                     states_rollout[agent_id].append(obs[agent_id])
                     next_states_rollout[agent_id].append(new_obs[agent_id])
@@ -497,13 +503,16 @@ class Dec_Train():
                     infos_rollout[agent_id].append({})
 
                 if not self.assistive_gym:
-                    rewards = sum(rewards)
+                    rewards = sum(rewards) / 2
                     dones = all(dones)
                 else:
                     rewards = (rewards['robot'] + rewards['human']) / 2
                     dones = dones['__all__']
 
                 if dones:
+                    lengths.append(ep_len)
+                    ep_len = 0
+                    self.env.seed(int(time.time()))
                     obs = self.env.reset()
                 else:
                     obs = new_obs
@@ -521,23 +530,25 @@ class Dec_Train():
                         actions_rollout=actions_rollout[agent_id], rewards_rollout=rewards_rollout[agent_id], dones_rollout=dones_rollout[agent_id], values_rollout=values_rollout[agent_id],
                         log_probs_rollout=log_probs_rollout[agent_id], infos_rollout=infos_rollout[agent_id]) for agent_id in self.agents]
             
-            print(f'epoch: {epoch} | avg length: {round(n_steps / np.sum(dones_rollout[list(dones_rollout.keys())[0]]))} | avg reward: {round(np.sum(rewards_rollout[list(dones_rollout.keys())[0]]) / np.sum(dones_rollout[list(dones_rollout.keys())[0]]), 2)}')
+            print(f'epoch: {epoch} | avg length: {round(np.mean(lengths), 2)} | avg reward: {round(np.sum(rewards_rollout[list(dones_rollout.keys())[0]]) / np.sum(dones_rollout[list(dones_rollout.keys())[0]]), 2)}')
             self.save(path)
     
     def test(self, test_epochs=10, load_model=False, load_path=None, env_id=None):
         if load_model:
             assert load_path and env_id, 'Please provide load path and env id'
-            print('Loading Model...')
-            self.load(load_path, env_id)
+            print(f'Loading Model from {load_path} for env: {env_id}')
+            self.load(load_path)
             print('Loaded Models')
         
         test_rewards = []
         test_length = []
+        self.env_test.render()
         
         for _ in range(test_epochs):
             dones = False
             rewards = 0
             length = 0
+            # self.env.seed(int(time.time()))
             obs = self.env_test.reset()
             while not dones:
                 with th.no_grad():
@@ -549,14 +560,16 @@ class Dec_Train():
                         actions[agent_id] = action.squeeze().cpu().numpy()
                     
                 if self.assistive_gym:
-                    new_obs, rewards, dones, infos = self.env.step(actions)
+                    new_obs, rewards, dones, infos = self.env_test.step(actions)
                 else:
-                    new_obs, rewards, dones, infos = self.env.step([actions[action] for action in actions])
+                    new_obs, rewards, dones, infos = self.env_test.step([actions[action] for action in actions])
 
-                reward = sum(reward)
-                dones = all(dones)
-
-                rewards += reward
+                if not self.assistive_gym:
+                    rewards = sum(rewards) / 2
+                    dones = all(dones)
+                else:
+                    rewards = (rewards['robot'] + rewards['human']) / 2
+                    dones = dones['__all__']
                 length += 1
 
                 obs = new_obs

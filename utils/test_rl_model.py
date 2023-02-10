@@ -37,6 +37,8 @@ sys.path.append(PACKAGE_PATH)
 from algo.ppo.ppo import Dec_Train, obs_as_tensor
 from test_irl import AIRL_Test
 
+'''NOTE: This file is now outdated and may not work correctly. Feel free to fix the errors and use it.'''
+
 ''' This file can be used to test a trained RL agent(s) for any ma-gym(https://github.com/prasuchit/ma-gym) environment '''
 
 class Test(Dec_Train):
@@ -73,7 +75,7 @@ class Test(Dec_Train):
         # print(f"Robot state: Onion: {oloc_r}, Eef: {eefloc_r}, Pred: {pred_r}, Interaction: {bool(inter_r)};\nRobot action: {rob_act};")
         # print(f"Human state: Onion: {oloc_h}, Eef: {eefloc_h}, Pred: {pred_h}, Interaction: {bool(inter_h)};\nHuman action: {hum_act};")
         # new_obs, rewards, dones, infos = self.env.step(actions, verbose=0)
-        # # rewards = sum(rewards)
+        # # rewards = sum(rewards) / 2
         # dones = all(dones)
         # print(f"Reward: {rewards}")
         # if dones:
@@ -84,18 +86,19 @@ class Test(Dec_Train):
 
         print("Saving learned policies...")
 
-        test_irl = AIRL_Test(env_id)
+        # test_irl = AIRL_Test(env_id)
         
-        load_env_id = env_id.replace(":", "_")
+        # load_env_id = env_id.replace(":", "_")
 
-        load_dir = f'{PACKAGE_PATH}/models/{load_env_id}/'
+        # load_dir = f'{PACKAGE_PATH}/models/{load_env_id}/'
 
-        test_irl.save_discrete_policy(path=load_dir, nodisc=True)
+        # test_irl.save_discrete_policy(path=load_dir, nodisc=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
-    parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    # parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    parser.add_argument('--env', type=str, default='FeedingSawyerHuman-v1', help='Provide the env')
     parser.add_argument('--training_epochs', type=int, default=20, help='Total training epochs')
     args = parser.parse_args()
 

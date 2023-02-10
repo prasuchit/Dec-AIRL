@@ -9,7 +9,8 @@
 **/models_airl
 **/weights
 **/saved_policies
-!models/dummy_file.txt
-!models_airl/dummy_file.txt
-buffers/*
-!buffers/dummy_file.txt
+# !models/dummy_file.txt
+# !models_airl/dummy_file.txt
+# !buffers/dummy_file.txt
+**/buffers
+**/data

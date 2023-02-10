@@ -11,6 +11,8 @@ from time import time
 path = os.path.dirname (os.path.realpath (__file__))
 PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 
+''' NOTE: This file is now outdated. May not work correctly. Feel free to update and use it.'''
+
 OLOC = {
     0: 'Unknown',
     1: 'OnConveyor',
@@ -135,7 +137,7 @@ for step in tqdm(range(total_timesteps)):
 
     new_obs, rewards, dones, infos = env.step(actions, verbose=0)
     # print(rewards, actions, obs)
-    rewards = sum(rewards)
+    rewards = sum(rewards) / 2
     dones = all(dones)
 
     states_rollout.append(obs)

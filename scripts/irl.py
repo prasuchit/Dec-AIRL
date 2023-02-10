@@ -38,7 +38,7 @@ sys.path.append(PACKAGE_PATH)
 from algo.airl.airl import AIRL
 
 
-''' This file trains a IRL agent(s) to learn from recorded expert trajectories for any ma-gym(https://github.com/prasuchit/ma-gym) environment '''
+''' This file trains a IRL agent(s) to learn from recorded expert trajectories for any ma-gym or assistive-gym environment. Make sure you clone the right fork! '''
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
@@ -46,8 +46,8 @@ if __name__ == '__main__':
     # p.add_argument('--rollout_length', type=int, default=50000)
     p.add_argument('--num_steps', type=int, default=10 ** 7)
     p.add_argument('--eval_interval', type=int, default=4096)
-    # p.add_argument('--env_id', type=str, default='FeedingSawyerHuman-v1')
-    p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
+    p.add_argument('--env_id', type=str, default='FeedingSawyerHuman-v1')
+    # p.add_argument('--env_id', type=str, default='ma_gym:DecHuRoSorting-v0')
     p.add_argument('--cuda', action='store_true', default=False)
     p.add_argument('--seed', type=int, default=1)
     p.add_argument('--failure_traj', action='store_true', default=False)

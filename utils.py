@@ -29,7 +29,7 @@ import torch as th
 
 import sys
 import os
-sys.path.append(os.getcwd() + f'/airl-ppo/')
+# sys.path.append(os.getcwd() + f'/airl-ppo/')
 from buffer import Buffer
 
 

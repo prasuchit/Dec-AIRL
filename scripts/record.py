@@ -25,7 +25,7 @@
 import os
 import sys
 import argparse
-
+import time 
 import gym
 import numpy as np
 import torch
@@ -36,13 +36,14 @@ PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 sys.path.append(PACKAGE_PATH)
 from algo.ppo.ppo import Dec_Train, obs_as_tensor
 
-''' This file records expert trajectories from a trained RL agent(s) for any ma-gym(https://github.com/prasuchit/ma-gym) environment '''
+''' This file records expert trajectories from a trained Dec-PPO agent(s) for any ma-gym and assistive-gym environments '''
 
 class Record(Dec_Train):
     def __init__(self, env_id, device='cpu', seed=1024):
         super().__init__(env_id, device=device, seed=seed)
     
-    def record(self, num_steps=10000):
+    def record(self, num_steps=10000, save_env_id=''):
+        self.env.seed(int(time.time()))
         obs = self.env.reset()
 
         states_rollout = {agent_id: [] for agent_id in self.agents}
@@ -85,13 +86,14 @@ class Record(Dec_Train):
 
             # print(rewards, actions, obs)
             if not self.assistive_gym:
-                    rewards = sum(rewards)
+                    rewards = sum(rewards) / 2
                     dones = all(dones)
             else:
                 rewards = (rewards['robot'] + rewards['human']) / 2
                 dones = dones['__all__']
 
             if dones:
+                self.env.seed(int(time.time()))
                 obs = self.env.reset()
 
                 length_stats.append(length)
@@ -120,7 +122,7 @@ class Record(Dec_Train):
         'next_state': next_states_rollout
         }
 
-        save_path = f'{PACKAGE_PATH}/buffers/{env_id}'
+        save_path = f'{PACKAGE_PATH}/buffers/{save_env_id}'
         if not os.path.isdir(save_path):
             os.mkdir(save_path)
         torch.save(trajectories, f'{save_path}/trajectory.pt')    
@@ -130,13 +132,14 @@ class Record(Dec_Train):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
-    parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    # parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
+    parser.add_argument('--env', type=str, default='FeedingSawyerHuman-v1', help='Provide the env')
     # parser.add_argument('--training_epochs', type=int, default=20, help='Total training epochs')
     args = parser.parse_args()
 
     env_id = args.env
-    load_env_id = env_id.replace(":", "_")
+    load_env_id = save_env_id = env_id.replace(":", "_")
     ppo = Record(env_id)
 
     ppo.load(path=f'{PACKAGE_PATH}/models/{load_env_id}')
-    ppo.record(num_steps=10000)
+    ppo.record(num_steps=10000, save_env_id=save_env_id)
