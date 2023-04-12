@@ -34,6 +34,7 @@ PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 
 sys.path.append(PACKAGE_PATH)
 from algo.ppo.ppo import Dec_Train
+from algo.ppo.recurrent.RecurrentPPO import RecurrentDec_Train
 
 ''' This file trains an RL agent(s) using Decentralized Proximal Policy Optimization(Dec-PPO) for 
     any ma-gym(https://github.com/prasuchit/ma-gym) or assistive-gym(https://github.com/prasuchit/assistive-gym) environment '''
@@ -51,12 +52,13 @@ if __name__ == '__main__':
 
     env_id = args.env
     save_env_id = env_id.replace(":", "_")
-    ppo = Dec_Train(env_id, seed = args.seed)
+    # ppo = Dec_Train(env_id, seed = args.seed)
+    r_ppo = RecurrentDec_Train(env_id, seed= args.seed)
 
     if not args.test:
         if args.load_existing:
-            ppo.load(args.model_path + f'{save_env_id}')
-        ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
-        ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
+            r_ppo.load(args.model_path + f'{save_env_id}')
+        r_ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+        r_ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
     else:
-        ppo.test(load_model=True, load_path=f'{PACKAGE_PATH}/models/{save_env_id}',env_id=env_id)
+        r_ppo.test(load_model=True, load_path=f'{PACKAGE_PATH}/models/{save_env_id}',env_id=env_id)

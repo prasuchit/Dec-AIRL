@@ -42,21 +42,13 @@ from stable_baselines3.common.type_aliases import (
 )
 from stable_baselines3.common.vec_env import VecNormalize
 
+from type_aliases import RolloutBufferSamples_Dec
+
 try:
     # Check memory used by replay buffer when possible
     import psutil
 except ImportError:
     psutil = None
-
-
-class RolloutBufferSamples_Dec(NamedTuple):
-    local_observations: th.as_tensor
-    global_observations: th.as_tensor
-    actions: th.as_tensor
-    old_values: th.as_tensor
-    old_log_prob: th.as_tensor
-    advantages: th.as_tensor
-    returns: th.as_tensor
 
 
 class BaseBuffer_Dec(ABC):
@@ -200,7 +192,6 @@ class BaseBuffer_Dec(ABC):
             return env.normalize_reward(reward).astype(np.float32)
         return reward
 
-
 class RolloutBuffer_Dec(BaseBuffer_Dec):
     """
     Rollout buffer used in on-policy algorithms like A2C/PPO.
@@ -209,11 +200,9 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
     This experience will be discarded after the policy update.
     In order to use PPO objective, we also store the current value of each state
     and the log probability of each taken action.
-
     The term rollout here refers to the model-free notion and should not
     be used with the concept of rollout used in model-based RL or planning.
     Hence, it is only involved in policy and value function training but not action selection.
-
     :param buffer_size: Max number of element in the buffer
     :param observation_space: Observation space
     :param action_space: Action space
@@ -262,21 +251,16 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         """
         Post-processing step: compute the lambda-return (TD(lambda) estimate)
         and GAE(lambda) advantage.
-
         Uses Generalized Advantage Estimation (https://arxiv.org/abs/1506.02438)
         to compute the advantage. To obtain vanilla advantage (A(s) = R - V(S))
         where R is the discounted reward with value bootstrap,
         set ``gae_lambda=1.0`` during initialization.
-
         The TD(lambda) estimator has also two special cases:
         - TD(1) is Monte-Carlo estimate (sum of discounted rewards)
         - TD(0) is one-step estimate with bootstrapping (r_t + gamma * v(s_{t+1}))
-
         For more information, see discussion in https://github.com/DLR-RM/stable-baselines3/pull/375.
-
         :param last_values: state value estimation for the last step (one for each env)
         :param dones: if the last step was a terminal step (one bool for each env).
-
         """
         # Convert to numpy
         last_values = last_values.clone().cpu().numpy().flatten()

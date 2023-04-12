@@ -82,7 +82,7 @@ path = os.path.dirname (os.path.realpath (__file__))
 PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 
 sys.path.append(PACKAGE_PATH)
-from utils import normalize
+from utils import normalize, get_assistive_gym_envs_list
 from algo.ppo.ActorCritic import OnPolicyAlgorithm_Dec, ActorCriticPolicy_Dec
 
 
@@ -92,23 +92,6 @@ random.seed(SEED)
 th.manual_seed(SEED)
 np.random.seed(SEED)
 th.use_deterministic_algorithms(True)
-# robot_state_EOF = 12
-
-assistive_gym_env_id = {
-    "ScratchItchPR2-v1", "ScratchItchJaco-v1", "ScratchItchBaxter-v1", "ScratchItchSawyer-v1", "ScratchItchStretch-v1", "ScratchItchPanda-v1",
-    "ScratchItchPR2Human-v1", "ScratchItchJacoHuman-v1", "ScratchItchBaxterHuman-v1", "ScratchItchSawyerHuman-v1", "ScratchItchStretchHuman-v1", "ScratchItchPandaHuman-v1",
-    "BedBathingPR2-v1", "BedBathingJaco-v1", "BedBathingBaxter-v1", "BedBathingSawyer-v1", "BedBathingStretch-v1", "BedBathingPanda-v1",
-    "BedBathingPR2Human-v1", "BedBathingJacoHuman-v1", "BedBathingBaxterHuman-v1", "BedBathingSawyerHuman-v1", "BedBathingStretchHuman-v1", "BedBathingPandaHuman-v1",
-    "FeedingPR2-v1", "FeedingJaco-v1", "FeedingBaxter-v1", "FeedingSawyer-v1", "FeedingStretch-v1", "FeedingPanda-v1",
-    "FeedingPR2Human-v1", "FeedingJacoHuman-v1", "FeedingBaxterHuman-v1", "FeedingSawyerHuman-v1", "FeedingStretchHuman-v1", "FeedingPandaHuman-v1",
-    "DrinkingPR2-v1", "DrinkingJaco-v1", "DrinkingBaxter-v1", "DrinkingSawyer-v1", "DrinkingStretch-v1", "DrinkingPanda-v1",
-    "DrinkingPR2Human-v1", "DrinkingJacoHuman-v1", "DrinkingBaxterHuman-v1", "DrinkingSawyerHuman-v1", "DrinkingStretchHuman-v1", "DrinkingPandaHuman-v1",
-    "DressingPR2-v1", "DressingJaco-v1", "DressingBaxter-v1", "DressingSawyer-v1", "DressingStretch-v1", "DressingPanda-v1",
-    "DressingPR2Human-v1", "DressingJacoHuman-v1", "DressingBaxterHuman-v1", "DressingSawyerHuman-v1", "DressingStretchHuman-v1", "DressingPandaHuman-v1",
-    "ArmManipulationPR2-v1", "ArmManipulationJaco-v1", "ArmManipulationBaxter-v1", "ArmManipulationSawyer-v1", "ArmManipulationStretch-v1", "ArmManipulationPanda-v1",
-    "ArmManipulationPR2Human-v1", "ArmManipulationJacoHuman-v1", "ArmManipulationBaxterHuman-v1", "ArmManipulationSawyerHuman-v1", "ArmManipulationStretchHuman-v1", "ArmManipulationPandaHuman-v1"
-}
-
 
 def obs_as_tensor(obs, device='cpu'):
     obs = th.tensor(obs).float().to(device)
@@ -168,7 +151,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
 
     def __init__(
             self,
-            policy: Union[str, Type[ActorCriticPolicy]],
+            policy: Union[str, Type[ActorCriticPolicy_Dec]],
             env: Union[GymEnv, str],
             agent_id: int,
             learning_rate: Union[float, Schedule] = 3e-4,
@@ -427,7 +410,7 @@ class Dec_Train():
         self.seed = seed
 
         # if the env belongs to assistive gym
-        if env_id in assistive_gym_env_id:
+        if env_id in get_assistive_gym_envs_list():
             # if the env is cooperative
             if 'Human' in env_id:
                 import importlib
