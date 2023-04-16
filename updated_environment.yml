@@ -1,9 +1,10 @@
-name: dec_airl
+name: dec_airl_ma_gym
 channels:
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
   - _openmp_mutex=5.1=1_gnu
+  - autopep8=1.6.0=pyhd3eb1b0_1
   - blas=1.0=mkl
   - ca-certificates=2023.01.10=h06a4308_0
   - certifi=2022.12.7=py38h06a4308_0
@@ -20,12 +21,14 @@ dependencies:
   - ncurses=6.3=h7f8727e_2
   - openssl=1.1.1t=h7f8727e_0
   - pip=21.2.2=py38h06a4308_0
+  - pycodestyle=2.10.0=py38h06a4308_0
   - python=3.8.13=h12debd9_0
   - readline=8.1.2=h7f8727e_1
   - setuptools=58.0.4=py38h06a4308_0
+  - six=1.16.0=pyhd3eb1b0_1
   - sqlite=3.38.3=hc218d9a_0
   - tk=8.6.12=h1ccaba5_0
-  - tqdm=4.65.0=py38hb070fc8_0
+  - toml=0.10.2=pyhd3eb1b0_0
   - wheel=0.37.1=pyhd3eb1b0_0
   - xz=5.2.5=h7f8727e_1
   - zlib=1.2.12=h7f8727e_2
@@ -38,9 +41,8 @@ dependencies:
     - contourpy==1.0.7
     - cycler==0.11.0
     - cython==0.29.32
-    - decorator==5.1.1
     - fonttools==4.39.3
-    - future==0.18.3
+    - future==0.18.2
     - gast==0.3.3
     - google-auth==1.35.0
     - google-auth-oauthlib==0.4.6
@@ -60,13 +62,12 @@ dependencies:
     - numpy==1.23.4
     - oauthlib==3.2.2
     - opt-einsum==3.3.0
-    - packaging==23.0
+    - packaging==23.1
     - pandas==2.0.0
     - pillow==9.5.0
-    - protobuf==3.20.1
+    - protobuf==3.20.3
     - pyasn1==0.4.8
     - pyasn1-modules==0.2.8
-    - pybullet==2.4.8
     - pyglet==1.5.0
     - pyparsing==3.0.9
     - python-dateutil==2.8.2
@@ -77,14 +78,14 @@ dependencies:
     - sb3-contrib==1.8.0
     - scipy==1.4.1
     - shutup==0.2.0
-    - six==1.15.0
-    - stable-baselines3==1.8.0
+    - stable-baselines3==1.7.0
     - tensorboard==2.2.2
     - tensorboard-plugin-wit==1.8.1
     - tensorflow==2.2.0
     - tensorflow-estimator==2.2.0
     - termcolor==2.2.0
     - torch==1.12.1
+    - tqdm==4.65.0
     - typing-extensions==4.5.0
     - tzdata==2023.3
     - urllib3==1.26.12

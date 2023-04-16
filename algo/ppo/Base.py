@@ -74,16 +74,14 @@ from stable_baselines3.common.preprocessing import get_action_dim, is_image_spac
 import gym
 import numpy as np
 from gym.spaces import Box
-from algo.ppo.VecEnv import DummyVecEnv_Dec
+from algo.ppo.VecEnv import DummyVecEnv_Dec, maybe_make_env
 from utils import obs_as_tensor
 
 class BaseModel_Dec(nn.Module, ABC):
     """
     The base model object: makes predictions in response to observations.
-
     In the case of policies, the prediction is an action. In the case of critics, it is the
     estimated value of the observation.
-
     :param observation_space: The observation space of the environment
     :param action_space: The action space of the environment
     :param features_extractor_class: Features extractor to use.
@@ -144,7 +142,6 @@ class BaseModel_Dec(nn.Module, ABC):
         """
         Update the network keyword arguments and create a new features extractor object if needed.
         If a ``features_extractor`` object is passed, then it will be shared.
-
         :param net_kwargs: the base network keyword arguments, without the ones
             related to features extractor
         :param features_extractor: a features extractor object.
@@ -165,7 +162,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def extract_features(self, obs: th.as_tensor) -> th.as_tensor:
         """
         Preprocess the observation if needed and extract features.
-
         :param obs:
         :return:
         """
@@ -176,7 +172,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         """
         Get data that need to be saved in order to re-create the model when loading it from disk.
-
         :return: The dictionary to pass to the as kwargs constructor when reconstruction this model.
         """
         return dict(
@@ -192,7 +187,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def device(self) -> th.device:
         """Infer which device this policy lives on by inspecting its parameters.
         If it has no parameters, the 'cpu' device is used as a fallback.
-
         :return:"""
         for param in self.parameters():
             return param.device
@@ -201,7 +195,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def save(self, path: str) -> None:
         """
         Save model to a given location.
-
         :param path:
         """
         th.save({"state_dict": self.state_dict(), "data": self._get_constructor_parameters()}, path)
@@ -210,7 +203,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def load(cls, path: str, device: Union[th.device, str] = "auto") -> "BaseModel":
         """
         Load model from path.
-
         :param path:
         :param device: Device on which the policy should be loaded.
         :return:
@@ -236,7 +228,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def load_from_vector(self, vector: np.ndarray) -> None:
         """
         Load parameters from a 1D vector.
-
         :param vector:
         """
         th.nn.utils.vector_to_parameters(th.FloatTensor(vector).to(self.device), self.parameters())
@@ -244,7 +235,6 @@ class BaseModel_Dec(nn.Module, ABC):
     def parameters_to_vector(self) -> np.ndarray:
         """
         Convert the parameters to a 1D vector.
-
         :return:
         """
         return th.nn.utils.parameters_to_vector(self.parameters()).detach().cpu().numpy()
@@ -252,9 +242,7 @@ class BaseModel_Dec(nn.Module, ABC):
     def set_training_mode(self, mode: bool) -> None:
         """
         Put the policy in either training or evaluation mode.
-
         This affects certain modules, such as batch normalisation and dropout.
-
         :param mode: if true, set to training mode, else set to evaluation mode
         """
         self.train(mode)
@@ -263,7 +251,6 @@ class BaseModel_Dec(nn.Module, ABC):
         """
         Convert an input observation to a PyTorch tensor that can be fed to a model.
         Includes sugar-coating to handle different observations (e.g. normalizing images).
-
         :param observation: the input observation
         :return: The observation as PyTorch tensor
             and whether the observation is vectorized or not
@@ -302,9 +289,7 @@ class BaseModel_Dec(nn.Module, ABC):
 
 class BasePolicy_Dec(BaseModel_Dec):
     """The base policy object.
-
     Parameters are mostly the same as `BaseModel`; additions are documented below.
-
     :param args: positional arguments passed through to `BaseModel`.
     :param kwargs: keyword arguments passed through to `BaseModel`.
     :param squash_output: For continuous actions, whether the output is squashed
@@ -340,10 +325,8 @@ class BasePolicy_Dec(BaseModel_Dec):
     def _predict(self, observation: th.as_tensor, deterministic: bool = False) -> th.as_tensor:
         """
         Get the action according to the policy for a given observation.
-
         By default provides a dummy implementation -- not all BasePolicy classes
         implement this, e.g. if they are a Critic in an Actor-Critic method.
-
         :param observation:
         :param deterministic: Whether to use stochastic or deterministic actions
         :return: Taken action according to the policy
@@ -359,7 +342,6 @@ class BasePolicy_Dec(BaseModel_Dec):
         """
         Get the policy action and state from an observation (and optional state).
         Includes sugar-coating to handle different observations (e.g. normalizing images).
-
         :param observation: the input observation
         :param state: The last states (can be None, used in recurrent policies)
         :param mask: The last masks (can be None, used in recurrent policies)
@@ -401,7 +383,6 @@ class BasePolicy_Dec(BaseModel_Dec):
         """
         Rescale the action from [low, high] to [-1, 1]
         (no need for symmetric action space)
-
         :param action: Action to scale
         :return: Scaled action
         """
@@ -412,7 +393,6 @@ class BasePolicy_Dec(BaseModel_Dec):
         """
         Rescale the action from [-1, 1] to [low, high]
         (no need for symmetric action space)
-
         :param scaled_action: Action to un-scale
         """
         low, high = self.action_space.low, self.action_space.high
@@ -453,7 +433,7 @@ class BaseAlgorithm_Dec(ABC):
         self,
         policy: Type[BasePolicy],
         env: Union[GymEnv, str, None],
-        agent_id,
+        agent_id: int,
         policy_base: Type[BasePolicy],
         learning_rate: Union[float, Schedule],
         policy_kwargs: Optional[Dict[str, Any]] = None,
@@ -488,6 +468,7 @@ class BaseAlgorithm_Dec(ABC):
         self.num_timesteps = 0
         # Used for updating schedules
         self._total_timesteps = 0
+        self._num_timesteps_at_start = 0
         self.eval_env = None
         self.seed = seed
         self.action_noise = None  # type: Optional[ActionNoise]
@@ -796,6 +777,7 @@ class BaseAlgorithm_Dec(ABC):
             # Make sure training timesteps are ahead of the internal counter
             total_timesteps += self.num_timesteps
         self._total_timesteps = total_timesteps
+        self._num_timesteps_at_start = self.num_timesteps
 
         # Avoid resetting the environment when calling ``.learn()`` consecutive times
         if reset_num_timesteps or self._last_obs is None:

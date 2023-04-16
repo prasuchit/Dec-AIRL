@@ -42,7 +42,7 @@ from stable_baselines3.common.type_aliases import (
 )
 from stable_baselines3.common.vec_env import VecNormalize
 
-from type_aliases import RolloutBufferSamples_Dec
+from algo.ppo.type_aliases import RolloutBufferSamples_Dec
 
 try:
     # Check memory used by replay buffer when possible
@@ -289,7 +289,7 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         episode_start: np.ndarray,
         value: th.as_tensor,
         log_prob: th.as_tensor,
-    ) -> None:
+    ) -> bool:
         """
         :param obs: Observation
         :param action: Action
@@ -309,19 +309,20 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         # if isinstance(self.observation_space, spaces.Discrete):
         #     obs = obs.reshape((self.n_envs,) + self.obs_shape)
 
-        self.local_observations[self.pos] = np.array(local_obs).copy()
-        self.global_observations[self.pos] = np.array(global_obs).copy()
-        self.actions[self.pos] = np.array(action).copy()
-        self.rewards[self.pos] = np.array(reward).copy()
-        self.episode_starts[self.pos] = np.array(episode_start).copy()
+        self.local_observations[self.pos] = th.as_tensor(local_obs)
+        self.global_observations[self.pos] = th.as_tensor(global_obs)
+        self.actions[self.pos] = th.as_tensor(action)
+        self.rewards[self.pos] = th.as_tensor(reward)
+        self.episode_starts[self.pos] = th.as_tensor(episode_start)
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
         self.pos += 1
         if self.pos == self.buffer_size:
             self.full = True
+        return self.full
 
     def get(self, batch_size: Optional[int] = None) -> Generator[RolloutBufferSamples, None, None]:
-        assert self.full, ""
+        assert self.full, "Can only sample after buffer is full."
         indices = np.random.permutation(self.buffer_size * self.n_envs)
         # Prepare the data
         if not self.generator_ready:

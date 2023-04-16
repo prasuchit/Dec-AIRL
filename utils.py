@@ -49,11 +49,11 @@ def get_assistive_gym_envs_list():
 }
 
 def obs_as_tensor(obs, device='cpu'):
-    obs = th.tensor(obs).float().to(device)
-    if len(obs.shape) == 2:
-        return obs[None, :]
-    elif len(obs.shape) == 3:
-        return obs
+    obs = th.as_tensor(obs).float().to(device)
+    if len(obs.shape) == 1:
+        return obs[None, :].float()
+    else:
+        return obs.float()
 
 
 def normalize(x):

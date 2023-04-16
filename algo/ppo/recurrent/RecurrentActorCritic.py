@@ -1,5 +1,8 @@
+from copy import deepcopy
 import numpy as np
 from algo.ppo.ActorCritic import ActorCriticPolicy_Dec
+from algo.ppo.Buffer import RolloutBuffer_Dec
+from algo.ppo.recurrent.RecurrentBuffer import RecurrentRolloutBuffer_Dec
 from algo.ppo.type_aliases import RNNStates
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import gym
@@ -65,6 +68,7 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         self,
         local_observation_space: spaces.Space,
         global_observation_space: spaces.Space,
+        agent_id: int,
         action_space: spaces.Space,
         lr_schedule: Schedule,
         net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
@@ -89,24 +93,24 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
     ):
         self.lstm_output_dim = lstm_hidden_size
         super().__init__(
-            local_observation_space,
-            global_observation_space,
-            action_space,
-            lr_schedule,
-            net_arch,
-            activation_fn,
-            ortho_init,
-            use_sde,
-            log_std_init,
-            full_std,
-            use_expln,
-            squash_output,
-            features_extractor_class,
-            features_extractor_kwargs,
-            share_features_extractor,
-            normalize_images,
-            optimizer_class,
-            optimizer_kwargs,
+            local_observation_space=local_observation_space,
+            global_observation_space=global_observation_space,
+            agent_id=agent_id,
+            action_space=action_space,
+            lr_schedule=lr_schedule,
+            net_arch=net_arch,
+            activation_fn=activation_fn,
+            ortho_init=ortho_init,
+            use_sde=use_sde,
+            log_std_init=log_std_init,
+            full_std=full_std,
+            use_expln=use_expln,
+            squash_output=squash_output,
+            features_extractor_class=features_extractor_class,
+            features_extractor_kwargs=features_extractor_kwargs,
+            normalize_images=normalize_images,
+            optimizer_class=optimizer_class,
+            optimizer_kwargs=optimizer_kwargs,
         )
         
         self.lstm_kwargs = lstm_kwargs or {}
@@ -156,13 +160,20 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         Create the policy and value networks.
         Part of the layers can be shared.
         """
-        self.mlp_extractor = MlpExtractor(
+        self.mlp_extractor_critic = MlpExtractor(
             self.lstm_output_dim,
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
         )
 
+        self.mlp_extractor_actor = MlpExtractor(
+            self.lstm_output_dim,
+            net_arch=self.net_arch,
+            activation_fn=self.activation_fn,
+            device=self.device,
+        )
+        
     @staticmethod
     def _process_sequence(
         features: th.Tensor,
@@ -257,8 +268,8 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         latent_vf = self.critic(global_observation)
         lstm_states_vf = lstm_states_pi
 
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
+        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
+        latent_vf = self.mlp_extractor_actor.forward_critic(latent_vf)
 
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -286,7 +297,7 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         # features = super(ActorCriticPolicy_Dec, self).extract_features(obs, self.pi_features_extractor)
         local_observation = obs_as_tensor(local_observation, device=self.device)
         latent_pi, lstm_states = self._process_sequence(local_observation, lstm_states, episode_starts, self.lstm_actor)
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
+        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
         return self._get_action_dist_from_latent(latent_pi), lstm_states
 
     def predict_values(
@@ -316,7 +327,7 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         global_observation = obs_as_tensor(global_observation, device=self.device)
         latent_vf = self.critic(global_observation)
 
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
+        latent_vf = self.mlp_extractor_critic.forward_critic(latent_vf)
         return self.value_net(latent_vf)
 
     def evaluate_actions(
@@ -355,8 +366,8 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         latent_pi, _ = self._process_sequence(local_observation, lstm_states.pi, episode_starts, self.lstm_actor)
         latent_vf = self.critic(global_observation)
 
-        latent_pi = self.mlp_extractor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor.forward_critic(latent_vf)
+        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
+        latent_vf = self.mlp_extractor_critic.forward_critic(latent_vf)
 
         distribution = self._get_action_dist_from_latent(latent_pi)
         log_prob = distribution.log_prob(actions)

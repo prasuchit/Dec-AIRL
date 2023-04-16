@@ -82,9 +82,8 @@ path = os.path.dirname (os.path.realpath (__file__))
 PACKAGE_PATH = os.path.abspath(os.path.join(path, os.pardir))
 
 sys.path.append(PACKAGE_PATH)
-from utils import normalize, get_assistive_gym_envs_list
+from utils import normalize, get_assistive_gym_envs_list, obs_as_tensor
 from algo.ppo.ActorCritic import OnPolicyAlgorithm_Dec, ActorCriticPolicy_Dec
-
 
 
 SEED = 1
@@ -92,13 +91,6 @@ random.seed(SEED)
 th.manual_seed(SEED)
 np.random.seed(SEED)
 th.use_deterministic_algorithms(True)
-
-def obs_as_tensor(obs, device='cpu'):
-    obs = th.tensor(obs).float().to(device)
-    if len(obs.shape) == 2:
-        return obs[None, :]
-    elif len(obs.shape) == 3:
-        return obs
 
 class PPO_Dec(OnPolicyAlgorithm_Dec):
     """
@@ -151,7 +143,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
 
     def __init__(
             self,
-            policy: Union[str, Type[ActorCriticPolicy_Dec]],
+            policy: Union[str, Type[ActorCriticPolicy]],
             env: Union[GymEnv, str],
             agent_id: int,
             learning_rate: Union[float, Schedule] = 3e-4,
@@ -175,7 +167,13 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
             seed: Optional[int] = None,
             device: Union[th.device, str] = "auto",
             _init_setup_model: bool = True,
-            custom_rollout: bool = False
+            supported_action_spaces=(
+                spaces.Box,
+                spaces.Discrete,
+                spaces.MultiDiscrete,
+                spaces.MultiBinary,
+            ),
+            custom_rollout: bool = False            
     ):
 
         super(PPO_Dec, self).__init__(
@@ -198,12 +196,7 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
             create_eval_env=create_eval_env,
             seed=seed,
             _init_setup_model=False,
-            supported_action_spaces=(
-                spaces.Box,
-                spaces.Discrete,
-                spaces.MultiDiscrete,
-                spaces.MultiBinary,
-            ),
+            supported_action_spaces=supported_action_spaces,
             custom_rollout=custom_rollout
         )
 
@@ -510,8 +503,9 @@ class Dec_Train():
                 log_probs_rollout[agent_id] = th.as_tensor(log_probs_rollout[agent_id])
 
             [self.models[agent_id].learn(total_timesteps=10000000, states_rollout=states_rollout, next_states_rollout=next_states_rollout,
-                        actions_rollout=actions_rollout[agent_id], rewards_rollout=rewards_rollout[agent_id], dones_rollout=dones_rollout[agent_id], values_rollout=values_rollout[agent_id],
-                        log_probs_rollout=log_probs_rollout[agent_id], infos_rollout=infos_rollout[agent_id]) for agent_id in self.agents]
+                        actions_rollout=actions_rollout[agent_id], rewards_rollout=rewards_rollout[agent_id], dones_rollout=dones_rollout[agent_id], 
+                        values_rollout=values_rollout[agent_id], log_probs_rollout=log_probs_rollout[agent_id], infos_rollout=infos_rollout[agent_id]) 
+                        for agent_id in self.agents]
             
             print(f'epoch: {epoch} | avg length: {round(np.mean(lengths), 2)} | avg reward: {round(np.sum(rewards_rollout[list(dones_rollout.keys())[0]]) / np.sum(dones_rollout[list(dones_rollout.keys())[0]]), 2)}')
             self.save(path)
@@ -570,7 +564,6 @@ class Dec_Train():
     def load(self, path):
         for agent_id in self.agents:
             self.models[agent_id].set_parameters(f'{path}/{agent_id}')
-
 
 
 if __name__ == '__main__':

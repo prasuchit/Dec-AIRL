@@ -33,6 +33,7 @@ from torch import nn
 import numpy as np
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from copy import deepcopy
 
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.policies import ActorCriticPolicy
@@ -86,7 +87,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     """
     Policy class for actor-critic algorithms (has both policy and value prediction).
     Used by A2C, PPO and the likes.
-
     :param observation_space: Observation space
     :param action_space: Action space
     :param lr_schedule: Learning rate schedule (could be constant)
@@ -146,11 +146,11 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
                 optimizer_kwargs["eps"] = 1e-5
 
         super(ActorCriticPolicy_Dec, self).__init__(
-            local_observation_space,
-            global_observation_space,
-            action_space,
-            features_extractor_class,
-            features_extractor_kwargs,
+            local_observation_space=local_observation_space,
+            global_observation_space=global_observation_space,
+            action_space=action_space,
+            features_extractor_class=features_extractor_class,
+            features_extractor_kwargs=features_extractor_kwargs,
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs,
             squash_output=squash_output,
@@ -167,13 +167,29 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
         self.log_std_init = log_std_init
+
         self.agent_id = agent_id
+
+        # Check the observation space
+
+        # if type(observation_space).__name__ == 'MultiAgentObservationSpace':
+        # self.n_agent = len(observation_space)
         self.local_observation_dim = local_observation_space.shape[0]
         self.global_observation_dim = global_observation_space.shape[0]
+        # else:
+        #     raise ValueError('Only Support Multi Agent Environment')
+
+        # assert type(action_space).__name__ == 'MultiAgentActionSpace'
+
         self.observation_space_critic_dim = self.global_observation_dim
         self.observation_space_actor_dim = self.local_observation_dim
         self.observation_space_actor = spaces.Box(low=np.zeros(self.observation_space_actor_dim), high=np.ones(self.observation_space_actor_dim))
+
+        # obs_low = [observation_space[0].low] * self.n_agent
+        # obs_high = [observation_space[0].high] * self.n_agent
+        # self.observation_space_critic = spaces.Box(low=np.array(obs_low).flatten(), high=np.array(obs_high).flatten())
         self.observation_space_critic = global_observation_space
+
         self.features_extractor_critic = features_extractor_class(self.observation_space_critic, **self.features_extractor_kwargs)
         self.features_extractor_actor = features_extractor_class(self.observation_space_actor, **self.features_extractor_kwargs)
         self.features_dim_critic = self.features_extractor_critic.features_dim
@@ -209,7 +225,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     def _build(self, lr_schedule: Schedule) -> None:
         """
         Create the networks and the optimizer.
-
         :param lr_schedule: Learning rate schedule
             lr_schedule(1) is the initial learning rate
         """
@@ -256,12 +271,17 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     def forward(self, local_observation: th.as_tensor, global_observation: th.as_tensor, deterministic: bool = False) -> Tuple[th.as_tensor, th.as_tensor, th.as_tensor]:
         """
         Forward pass in all the networks (actor and critic)
-
         :param obs: Observation
         :param deterministic: Whether to sample or use deterministic actions
         :return: action, value and log probability of the action
         """
-        
+        # Preprocess the observation if needed
+        # features = self.extract_features(obs)
+        # observation = th.as_tensor(observation).float()
+
+        # get global and local observation
+        # global_observation = observation.reshape((observation.shape[0],-1))
+        # local_observation = observation[:, self.agent_id]
         local_observation = obs_as_tensor(local_observation, device=self.device)
         global_observation = obs_as_tensor(global_observation, device=self.device)
 
@@ -283,7 +303,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     def _get_action_dist_from_latent(self, latent_pi: th.as_tensor) -> Distribution:
         """
         Retrieve action distribution given the latent codes.
-
         :param latent_pi: Latent code for the actor
         :return: Action distribution
         """
@@ -308,7 +327,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     def _predict(self, observation: th.as_tensor, deterministic: bool = False) -> th.as_tensor:
         """
         Get the action according to the policy for a given observation.
-
         :param observation:
         :param deterministic: Whether to use stochastic or deterministic actions
         :return: Taken action according to the policy
@@ -326,7 +344,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
         """
         Evaluate actions according to the current policy,
         given the observations.
-
         :param obs:
         :param actions:
         :return: estimated value, log likelihood of taking those actions
@@ -357,7 +374,6 @@ class ActorCriticPolicy_Dec(BasePolicy_Dec):
     def get_distribution(self, observation: th.as_tensor) -> Distribution:
         """
         Get the current policy distribution given the observations.
-
         :param obs:
         :return: the action distribution.
         """
@@ -444,11 +460,11 @@ class OnPolicyAlgorithm_Dec(BaseAlgorithm_Dec):
             n_envs=self.n_envs,
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
-            self.local_observation_space,
-            self.global_observation_space,
-            self.action_space,
-            self.agent_id,
-            self.lr_schedule,
+            local_observation_space=self.local_observation_space,
+            global_observation_space=self.global_observation_space,
+            action_space=self.action_space,
+            agent_id=self.agent_id,
+            lr_schedule=self.lr_schedule,
             use_sde=self.use_sde,
             **self.policy_kwargs  # pytype:disable=not-instantiable
         )
@@ -465,7 +481,6 @@ class OnPolicyAlgorithm_Dec(BaseAlgorithm_Dec):
         Collect experiences using the current policy and fill a ``RolloutBuffer``.
         The term rollout here refers to the model-free notion and should not
         be used with the concept of rollout used in model-based RL or planning.
-
         :param env: The training environment
         :param callback: Callback that will be called at each step
             (and at the beginning and end of the rollout)
@@ -568,7 +583,7 @@ class OnPolicyAlgorithm_Dec(BaseAlgorithm_Dec):
             global_new_obs = np.concatenate([next_states_rollout[i][n_steps] for i in keys])
             self.num_timesteps += 1
 
-            # self._update_info_buffer(infos)
+            self._update_info_buffer(infos_rollout)
             n_steps += 1
 
             # Handle timeout by bootstraping with value function

@@ -1,6 +1,7 @@
 from functools import partial
-from ppo.Buffer import *
-from ppo.type_aliases import *
+from algo.ppo.Buffer import *
+from algo.ppo.type_aliases import *
+from stable_baselines3.common.preprocessing import get_action_dim, get_obs_shape
 
 def pad(
     seq_start_indices: np.ndarray,
@@ -119,7 +120,8 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
         
         self.hidden_state_shape = hidden_state_shape
         self.seq_start_indices, self.seq_end_indices = None, None
-        super().__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, n_envs=n_envs)
+        super().__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, gae_lambda, gamma, n_envs=n_envs)
+        self.reset()
 
     def reset(self) -> None:
         super().reset()
@@ -130,16 +132,18 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
 
     def add(
         self,
-        *args, lstm_states: RNNStates, **kwargs) -> None:
+        *args, lstm_states: RNNStates, **kwargs) -> bool:
         """
         :param hidden_states: LSTM cell and hidden state
         """
+        
         self.hidden_states_pi[self.pos] = np.array(lstm_states.pi[0].cpu().numpy())
         self.cell_states_pi[self.pos] = np.array(lstm_states.pi[1].cpu().numpy())
         self.hidden_states_vf[self.pos] = np.array(lstm_states.vf[0].cpu().numpy())
         self.cell_states_vf[self.pos] = np.array(lstm_states.vf[1].cpu().numpy())
-
-        super().add(*args, **kwargs)
+        
+        buffer_full = super().add(*args, **kwargs)    
+        return buffer_full    
 
     def get(self, batch_size: Optional[int] = None) -> Generator[RecurrentRolloutBufferSamples_Dec, None, None]:
         assert self.full, "Rollout buffer must be full before sampling from it"
@@ -147,6 +151,10 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
         indices = np.random.permutation(self.buffer_size * self.n_envs)
         # Prepare the data
         if not self.generator_ready:
+            # hidden_state_shape = (self.n_steps, lstm.num_layers, self.n_envs, lstm.hidden_size)
+            # swap first to (self.n_steps, self.n_envs, lstm.num_layers, lstm.hidden_size)
+            for tensor in ["hidden_states_pi", "cell_states_pi", "hidden_states_vf", "cell_states_vf"]:
+                self.__dict__[tensor] = self.__dict__[tensor].swapaxes(1, 2)
 
             _tensor_names = [
                 "local_observations",
@@ -221,13 +229,19 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
         lstm_states_pi = (self.to_torch(lstm_states_pi[0]).contiguous(), self.to_torch(lstm_states_pi[1]).contiguous())
         lstm_states_vf = (self.to_torch(lstm_states_vf[0]).contiguous(), self.to_torch(lstm_states_vf[1]).contiguous())
         
-        data = (
-            self.local_observations[batch_inds],
-            self.global_observations[batch_inds],
-            self.actions[batch_inds],
-            self.values[batch_inds].flatten(),
-            self.log_probs[batch_inds].flatten(),
-            self.advantages[batch_inds].flatten(),
-            self.returns[batch_inds].flatten(),
+        local_obs_shape = get_obs_shape(self.local_observation_space)   # We're getting this here again because 
+        global_obs_shape = get_obs_shape(self.global_observation_space) # the one stored in class isn't tuple format.
+        
+        return RecurrentRolloutBufferSamples_Dec(
+            # (batch_size, obs_dim) -> (n_seq, max_length, obs_dim) -> (n_seq * max_length, obs_dim)
+            local_observations=self.pad(self.local_observations[batch_inds]).reshape((padded_batch_size, *local_obs_shape)),
+            global_observations=self.pad(self.global_observations[batch_inds]).reshape((padded_batch_size, *global_obs_shape)),
+            actions=self.pad(self.actions[batch_inds]).reshape((padded_batch_size,) + self.actions.shape[1:]),
+            old_values=self.pad_and_flatten(self.values[batch_inds]),
+            old_log_prob=self.pad_and_flatten(self.log_probs[batch_inds]),
+            advantages=self.pad_and_flatten(self.advantages[batch_inds]),
+            returns=self.pad_and_flatten(self.returns[batch_inds]),
+            lstm_states=RNNStates(lstm_states_pi, lstm_states_vf),
+            episode_starts=self.pad_and_flatten(self.episode_starts[batch_inds]),
+            mask=self.pad_and_flatten(np.ones_like(self.returns[batch_inds])),
         )
-        return RecurrentRolloutBufferSamples_Dec(*tuple(map(self.to_torch, data)))

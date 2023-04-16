@@ -27,7 +27,7 @@ class RecurrentRolloutBufferSamples_Dec(NamedTuple):
     advantages: th.Tensor
     returns: th.Tensor
     lstm_states: RNNStates
-    episode_starts: th.Tensor
+    episode_starts: th.as_tensor
     mask: th.Tensor
 
 class RecurrentDictRolloutBufferSamples_Dec(NamedTuple):
