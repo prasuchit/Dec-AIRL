@@ -114,10 +114,6 @@ class AIRL(object):
         self.learning_steps_disc = 0
         self.eval_interval = eval_interval
 
-        self.buffers_exp = buffers_exp
-        self.buffers = Buffers_AIRL(self.n_steps)
-        
-
         try:
             assert type(self.env.action_space) == Box and self.assistive_gym
             self.local_observation_shape = {
@@ -141,6 +137,8 @@ class AIRL(object):
                 agent_id: 1
                 for agent_id in self.agents
             }
+        
+
             global_observation_space_low = np.concatenate([self.env.observation_space[i].low for i in range(len(self.env.observation_space))])
             global_observation_space_high = np.concatenate([self.env.observation_space[i].high for i in range(len(self.env.observation_space))])
             self.global_observation_space = Box(low=global_observation_space_low, high=global_observation_space_high)
@@ -148,9 +146,16 @@ class AIRL(object):
             self.global_action_shape = self.env.action_space[0].n
             self.action_continuous = False
 
+        self.buffers_exp = buffers_exp
+        self.buffers = Buffers_AIRL(buffer_size=self.n_steps, 
+                                    batch_size=self.batch_size,
+                                    agents=self.agents, 
+                                    device=self.device,
+                                    local_observation_shape=self.local_observation_shape,
+                                    local_action_shape=self.local_action_shape)
+        
         self.best_reward = - float('inf')
         # self.load_models(load_existing, trainpath)
-
 
     def update(self, epoch_ratio):
         for _ in range(self.epoch_disc):

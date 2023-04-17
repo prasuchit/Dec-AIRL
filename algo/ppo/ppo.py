@@ -353,6 +353,10 @@ class PPO_Dec(OnPolicyAlgorithm_Dec):
         self._n_updates += self.n_epochs
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
 
+        # print("Approx kl: ", np.mean(approx_kl_divs))
+        # print("Value loss: ", np.mean(value_losses))
+        # print("N updates: ", self._n_updates)
+        
         # Logs
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
         self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))

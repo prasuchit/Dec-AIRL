@@ -120,11 +120,11 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
         
         self.hidden_state_shape = hidden_state_shape
         self.seq_start_indices, self.seq_end_indices = None, None
-        super().__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, gae_lambda, gamma, n_envs=n_envs)
+        super(RecurrentRolloutBuffer_Dec, self).__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, gae_lambda, gamma, n_envs=n_envs)
         self.reset()
 
     def reset(self) -> None:
-        super().reset()
+        super(RecurrentRolloutBuffer_Dec, self).reset()
         self.hidden_states_pi = np.zeros(self.hidden_state_shape, dtype=np.float32)
         self.cell_states_pi = np.zeros(self.hidden_state_shape, dtype=np.float32)
         self.hidden_states_vf = np.zeros(self.hidden_state_shape, dtype=np.float32)
@@ -142,7 +142,7 @@ class RecurrentRolloutBuffer_Dec(RolloutBuffer_Dec):
         self.hidden_states_vf[self.pos] = np.array(lstm_states.vf[0].cpu().numpy())
         self.cell_states_vf[self.pos] = np.array(lstm_states.vf[1].cpu().numpy())
         
-        buffer_full = super().add(*args, **kwargs)    
+        buffer_full = super(RecurrentRolloutBuffer_Dec, self).add(*args, **kwargs)    
         return buffer_full    
 
     def get(self, batch_size: Optional[int] = None) -> Generator[RecurrentRolloutBufferSamples_Dec, None, None]:

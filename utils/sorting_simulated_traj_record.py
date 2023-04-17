@@ -178,9 +178,10 @@ trajectories = {
 'next_state': next_states_rollout
 }
 
-save_path = f'{PACKAGE_PATH}/buffers/{env_id}'
+save_env_id = env_id.replace(":", "_")
+save_path = f'{PACKAGE_PATH}/buffers/{save_env_id}'
 if not os.path.isdir(save_path):
     os.makedirs(save_path)
-torch.save(trajectories, f'{save_path}/data.pt')    
+torch.save(trajectories, f'{save_path}/trajectory.pt')    
 
 print(f'Collect Episodes: {len(length_stats)} | Avg Length: {round(np.mean(length_stats), 2)} | Avg Reward: {round(np.mean(reward_stats), 2)}')

@@ -17,6 +17,7 @@ from stable_baselines3.common.torch_layers import (
 )
 from stable_baselines3.common.utils import zip_strict
 from stable_baselines3.common.distributions import Distribution
+from stable_baselines3.common.preprocessing import preprocess_obs
 from torch import nn
 import torch as th
 
@@ -68,8 +69,8 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         self,
         local_observation_space: spaces.Space,
         global_observation_space: spaces.Space,
-        agent_id: int,
         action_space: spaces.Space,
+        agent_id: int,
         lr_schedule: Schedule,
         net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
         activation_fn: Type[nn.Module] = nn.Tanh,
@@ -92,7 +93,7 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         lstm_kwargs: Optional[Dict[str, Any]] = None,
     ):
         self.lstm_output_dim = lstm_hidden_size
-        super().__init__(
+        super(RecurrentActorCriticPolicy_Dec, self).__init__(
             local_observation_space=local_observation_space,
             global_observation_space=global_observation_space,
             agent_id=agent_id,
@@ -224,6 +225,16 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         # (sequence length, n_seq, lstm_out_dim) -> (batch_size, lstm_out_dim)
         lstm_output = th.flatten(th.cat(lstm_output).transpose(0, 1), start_dim=0, end_dim=1)
         return lstm_output, lstm_states
+    
+    def extract_features(self, features_extractor, obs_space, obs: th.as_tensor) -> th.as_tensor:
+        """
+        Preprocess the observation if needed and extract features.
+        :param obs:
+        :return:
+        """
+        assert features_extractor is not None, "No features extractor was set"
+        preprocessed_obs = preprocess_obs(obs, obs_space, normalize_images=self.normalize_images)
+        return features_extractor(preprocessed_obs)
 
     def forward(
         self,
@@ -243,16 +254,13 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         :param deterministic: Whether to sample or use deterministic actions
         :return: action, value and log probability of the action
         """
-        # # Preprocess the observation if needed
-        # features = self.extract_features(obs)
-        # if self.share_features_extractor:
-        #     pi_features = vf_features = features  # alis
-        # else:
-        #     pi_features, vf_features = features
-        # latent_pi, latent_vf = self.mlp_extractor(features)
-        
         local_observation = obs_as_tensor(local_observation, device=self.device)
         global_observation = obs_as_tensor(global_observation, device=self.device)
+        # # # Preprocess the observation if needed
+        # actor_features = self.extract_features(self.features_extractor_actor, self.local_observation_space, local_observation)
+        # critic_features = self.extract_features(self.features_extractor_critic, self.global_observation_space, global_observation)
+        # pi_features, _ = actor_features
+        # _, vf_features = critic_features
 
         latent_pi, lstm_states_pi = self._process_sequence(local_observation, lstm_states.pi, episode_starts, self.lstm_actor)
         
@@ -268,8 +276,10 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         latent_vf = self.critic(global_observation)
         lstm_states_vf = lstm_states_pi
 
-        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor_actor.forward_critic(latent_vf)
+        # critic
+        _, latent_vf = self.mlp_extractor_critic(latent_vf)
+        # actor
+        latent_pi, _ = self.mlp_extractor_actor(latent_pi)
 
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -296,9 +306,9 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         # # Call the method from the parent of the parent class
         # features = super(ActorCriticPolicy_Dec, self).extract_features(obs, self.pi_features_extractor)
         local_observation = obs_as_tensor(local_observation, device=self.device)
-        latent_pi, lstm_states = self._process_sequence(local_observation, lstm_states, episode_starts, self.lstm_actor)
-        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
-        return self._get_action_dist_from_latent(latent_pi), lstm_states
+        latent_pi, lstm_states_pi = self._process_sequence(local_observation, lstm_states.pi, episode_starts, self.lstm_actor)
+        latent_pi, _ = self.mlp_extractor_actor(latent_pi)
+        return self._get_action_dist_from_latent(latent_pi), lstm_states_pi
 
     def predict_values(
         self,
@@ -326,8 +336,7 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         # else:
         global_observation = obs_as_tensor(global_observation, device=self.device)
         latent_vf = self.critic(global_observation)
-
-        latent_vf = self.mlp_extractor_critic.forward_critic(latent_vf)
+        _, latent_vf = self.mlp_extractor_critic(latent_vf)
         return self.value_net(latent_vf)
 
     def evaluate_actions(
@@ -362,16 +371,17 @@ class RecurrentActorCriticPolicy_Dec(ActorCriticPolicy_Dec):
         # elif self.shared_lstm:
         #     latent_vf = latent_pi.detach()
         # else:
-        
+        local_observation = obs_as_tensor(local_observation, device=self.device)
         latent_pi, _ = self._process_sequence(local_observation, lstm_states.pi, episode_starts, self.lstm_actor)
         latent_vf = self.critic(global_observation)
 
-        latent_pi = self.mlp_extractor_actor.forward_actor(latent_pi)
-        latent_vf = self.mlp_extractor_critic.forward_critic(latent_vf)
-
-        distribution = self._get_action_dist_from_latent(latent_pi)
-        log_prob = distribution.log_prob(actions)
+        latent_pi, _  = self.mlp_extractor_actor(latent_pi)
+        _, latent_vf = self.mlp_extractor_critic(latent_vf)
+        # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
+        distribution = self._get_action_dist_from_latent(latent_pi)
+        actions = th.as_tensor(actions.squeeze()).to(self.device)
+        log_prob = distribution.log_prob(actions)
         return values, log_prob, distribution.entropy()
 
     def _predict(

@@ -70,7 +70,7 @@ class BaseBuffer_Dec(ABC):
         global_observation_space,
         action_space: spaces.Space,
         device: Union[th.device, str] = "cpu",
-        n_envs: int = 1,
+        n_envs: int = 2,
     ):
         super(BaseBuffer_Dec, self).__init__()
         self.buffer_size = buffer_size
@@ -222,7 +222,7 @@ class RolloutBuffer_Dec(BaseBuffer_Dec):
         device: Union[th.device, str] = "cpu",
         gae_lambda: float = 1,
         gamma: float = 0.99,
-        n_envs: int = 1,
+        n_envs: int = 2,
     ):
 
         super(RolloutBuffer_Dec, self).__init__(buffer_size, local_observation_space, global_observation_space, action_space, device, n_envs=n_envs)

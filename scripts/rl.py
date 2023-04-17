@@ -43,6 +43,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PPO forward reinforcement learning')
     parser.add_argument('--env', type=str, default='ma_gym:DecHuRoSorting-v0', help='Provide the env')
     # parser.add_argument('--env', type=str, default='FeedingSawyerHuman-v1', help='Provide the env')
+    parser.add_argument('--recurrent', action='store_true', default=True)
     parser.add_argument('--training_epochs', type=int, default=500, help='Total training epochs')
     parser.add_argument('--seed', type=int, default=321, help='Seed for random number gen')
     parser.add_argument('--load_existing', action='store_true', default=False)
@@ -52,15 +53,18 @@ if __name__ == '__main__':
 
     env_id = args.env
     save_env_id = env_id.replace(":", "_")
-    ppo = Dec_Train(env_id, seed = args.seed)
-    # r_ppo = RecurrentDec_Train(env_id, seed= args.seed)
-
-    if not args.test:
-        if args.load_existing:
-            ppo.load(args.model_path + f'{save_env_id}')
-        ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
-    #     ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
-    # else:
-    #     ppo.test(load_model=True, load_path=f'{PACKAGE_PATH}/models/{save_env_id}',env_id=env_id)
     
-    # r_ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+    if args.recurrent:
+        r_ppo = RecurrentDec_Train(env_id, seed= args.seed)
+        r_ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+    else:
+        ppo = Dec_Train(env_id, seed = args.seed)
+
+        if not args.test:
+            if args.load_existing:
+                ppo.load(args.model_path + f'{save_env_id}')
+            ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+            ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
+        else:
+            ppo.test(load_model=True, load_path=f'{PACKAGE_PATH}/models/{save_env_id}',env_id=env_id)
+    

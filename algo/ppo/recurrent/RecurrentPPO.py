@@ -159,25 +159,30 @@ class RecurrentPPO_Dec(PPO_Dec):
             custom_rollout: bool = False
     ):
 
-        super().__init__(
+        super(RecurrentPPO_Dec, self).__init__(
             policy=policy,
             env=env,
             agent_id=agent_id,
             learning_rate=learning_rate,
             n_steps=n_steps,
+            batch_size=batch_size,
+            n_epochs=n_epochs,
             gamma=gamma,
             gae_lambda=gae_lambda,
+            clip_range=clip_range,
+            clip_range_vf=clip_range_vf,
             ent_coef=ent_coef,
             vf_coef=vf_coef,
             max_grad_norm=max_grad_norm,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
+            target_kl=target_kl,
             tensorboard_log=tensorboard_log,
+            create_eval_env=create_eval_env,
             policy_kwargs=policy_kwargs,
             verbose=verbose,
-            device=device,
-            create_eval_env=create_eval_env,
             seed=seed,
+            device=device,
             _init_setup_model=False,
             supported_action_spaces=(
                 spaces.Box,
@@ -194,21 +199,22 @@ class RecurrentPPO_Dec(PPO_Dec):
             batch_size > 1
         ), "`batch_size` must be greater than 1. See https://github.com/DLR-RM/stable-baselines3/issues/440"
 
-        self.env = env
-        self.env_test = env
-        self.batch_size = batch_size
-        self.n_epochs = n_epochs
+        # self.env = env
+        # self.env_test = env
+        # self.batch_size = batch_size
+        # self.n_epochs = n_epochs
         self.clip_range = clip_range
         self.clip_range_vf = clip_range_vf
-        self.target_kl = target_kl
-        self.agent_id = agent_id
+        self.normalize_advantage = normalize_advantage
+        # self.target_kl = target_kl
+        # self.agent_id = agent_id
         self._last_lstm_states = None
 
         if _init_setup_model:
             self._setup_model()
 
     def _setup_model(self) -> None:
-        super()._setup_model()
+        # super()._setup_model()
 
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
@@ -266,6 +272,14 @@ class RecurrentPPO_Dec(PPO_Dec):
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
         )
+        
+        # Initialize schedules for policy/value clipping
+        self.clip_range = get_schedule_fn(self.clip_range)
+        if self.clip_range_vf is not None:
+            if isinstance(self.clip_range_vf, (float, int)):
+                assert self.clip_range_vf > 0, "`clip_range_vf` must be positive, pass `None` to deactivate vf clipping"
+
+            self.clip_range_vf = get_schedule_fn(self.clip_range_vf)
 
     def collect_rollouts(
         self,
@@ -337,23 +351,19 @@ class RecurrentPPO_Dec(PPO_Dec):
 
                 # Normalize advantage
                 advantages = rollout_data.advantages
-                advantages = (
-                    advantages - advantages[mask].mean()) / (advantages[mask].std() + 1e-8)
+                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
                 # ratio between old and new policy, should be one at the first iteration
                 ratio = th.exp(log_prob - rollout_data.old_log_prob)
 
                 # clipped surrogate loss
                 policy_loss_1 = advantages * ratio
-                policy_loss_2 = advantages * \
-                    th.clamp(ratio, 1 - clip_range, 1 + clip_range)
-                policy_loss = - \
-                    th.mean(th.min(policy_loss_1, policy_loss_2)[mask])
+                policy_loss_2 = advantages * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
+                policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()
 
                 # Logging
                 pg_losses.append(policy_loss.item())
-                clip_fraction = th.mean(
-                    (th.abs(ratio - 1) > clip_range).float()[mask]).item()
+                clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
                 clip_fractions.append(clip_fraction)
 
                 if self.clip_range_vf is None:
@@ -366,17 +376,15 @@ class RecurrentPPO_Dec(PPO_Dec):
                         values - rollout_data.old_values, -clip_range_vf, clip_range_vf
                     )
                 # Value loss using the TD(gae_lambda) target
-                # Mask padded sequences
-                # value_loss = th.mean(((rollout_data.returns - values_pred) ** 2)[mask])
                 value_loss = F.mse_loss(rollout_data.returns, values_pred)
                 value_losses.append(value_loss.item())
 
                 # Entropy loss favor exploration
                 if entropy is None:
                     # Approximate entropy when no analytical form
-                    entropy_loss = -th.mean(-log_prob[mask])
+                    entropy_loss = -th.mean(-log_prob)
                 else:
-                    entropy_loss = -th.mean(entropy[mask])
+                    entropy_loss = -th.mean(entropy)
 
                 entropy_losses.append(entropy_loss.item())
 
@@ -388,8 +396,7 @@ class RecurrentPPO_Dec(PPO_Dec):
                 # and Schulman blog: http://joschu.net/blog/kl-approx.html
                 with th.no_grad():
                     log_ratio = log_prob - rollout_data.old_log_prob
-                    approx_kl_div = th.mean(
-                        ((th.exp(log_ratio) - 1) - log_ratio)[mask]).cpu().numpy()
+                    approx_kl_div = th.mean((th.exp(log_ratio) - 1) - log_ratio).cpu().numpy()
                     approx_kl_divs.append(approx_kl_div)
 
                 if self.target_kl is not None and approx_kl_div > 1.5 * self.target_kl:
@@ -413,7 +420,6 @@ class RecurrentPPO_Dec(PPO_Dec):
         self._n_updates += self.n_epochs
         explained_var = explained_variance(
             self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
-
         # Logs
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
         self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
@@ -432,7 +438,7 @@ class RecurrentPPO_Dec(PPO_Dec):
         if self.clip_range_vf is not None:
             self.logger.record("train/clip_range_vf", clip_range_vf)
             
-    def _custom_rollouts(
+    def custom_rollouts(
             self,
             # env: VecEnv,
             # callback: BaseCallback,
@@ -480,22 +486,24 @@ class RecurrentPPO_Dec(PPO_Dec):
 
             # # Handle timeout by bootstraping with value function
             # # see GitHub issue #633
-            # for idx, done_ in enumerate(dones_rollout):
-            #     if (
-            #         done_
-            #         and infos_rollout[idx].get("terminal_observation") is not None
-            #         and infos_rollout[idx].get("TimeLimit.truncated", False)
-            #     ):
-            #         terminal_obs = self.policy.obs_to_tensor(infos_rollout[idx]["terminal_observation"])[0]
-            #         with th.no_grad():
-            #             terminal_lstm_state = (
-            #                 lstm_states.vf[0][:, idx : idx + 1, :].contiguous(),
-            #                 lstm_states.vf[1][:, idx : idx + 1, :].contiguous(),
-            #             )
-            #             # terminal_lstm_state = None
-            #             episode_starts = th.tensor([False], dtype=th.float32, device=self.device)
-            #             terminal_value = self.policy.predict_values(terminal_obs, terminal_lstm_state, episode_starts)[0]
-            #         rewards[idx] += self.gamma * terminal_value
+            for idx, done_ in enumerate(dones_rollout):
+                if (
+                    done_
+                    and infos_rollout[idx].get("terminal_observation") is not None
+                    and infos_rollout[idx].get("TimeLimit.truncated", False)
+                ):
+                    terminal_obs = self.policy.obs_to_tensor(infos_rollout[idx]["terminal_observation"])[0]
+                    with th.no_grad():
+                        
+                        ''' NOTE: We don't need this cuz we don't have critic lstm. '''
+                        terminal_lstm_state = (
+                            lstm_states.vf[0][:, idx : idx + 1, :].contiguous(),
+                            lstm_states.vf[1][:, idx : idx + 1, :].contiguous(),
+                        )
+                        # terminal_lstm_state = None
+                        episode_starts = th.tensor([False], dtype=th.float32, device=self.device)
+                        terminal_value = self.policy.predict_values(terminal_obs, terminal_lstm_state, episode_starts)[0]
+                    rewards[idx] += self.gamma * terminal_value
 
             buffer_full = rollout_buffer.add(self._last_local_obs, self._last_global_obs, clipped_actions, rewards, self._last_episode_starts, values, log_probs, lstm_states=self._last_lstm_states)
             self._last_episode_starts = dones
@@ -527,50 +535,63 @@ class RecurrentPPO_Dec(PPO_Dec):
         **kwargs
     ) -> SelfRecurrentPPO_Dec:
         
-        iteration = 0
-        if self.custom_rollout:
-            if self.custom_init:
-                total_timesteps, callback = self._setup_learn(
-                                                                total_timesteps,
-                                                                eval_env, 
-                                                                callback,
-                                                                eval_freq, 
-                                                                n_eval_episodes, 
-                                                                eval_log_path,
-                                                                reset_num_timesteps,
-                                                                tb_log_name,
-                                                            )
-            callback.on_training_start(locals(), globals())
-            self.custom_init = False
-            while self.num_timesteps < total_timesteps:
-                continue_training = self._custom_rollouts(self.rollout_buffer, **kwargs)
+        # iteration = 0
+        # if self.custom_rollout:
+        #     if self.custom_init:
+        #         total_timesteps, callback = self._setup_learn(
+        #                                                         total_timesteps,
+        #                                                         eval_env, 
+        #                                                         callback,
+        #                                                         eval_freq, 
+        #                                                         n_eval_episodes, 
+        #                                                         eval_log_path,
+        #                                                         reset_num_timesteps,
+        #                                                         tb_log_name,
+        #                                                     )
+        #     callback.on_training_start(locals(), globals())
+        #     self.custom_init = False
+        #     while self.num_timesteps < total_timesteps:
+        #         continue_training = self.custom_rollouts(self.rollout_buffer, **kwargs)
 
-                if continue_training is False:
-                    break
+        #         if continue_training is False:
+        #             break
 
-                iteration += 1
-                self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
+        #         iteration += 1
+        #         self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
 
-                # Display training infos
-                if log_interval is not None and iteration % log_interval == 0:
-                    time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
-                    fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
-                    self.logger.record("time/iterations", iteration, exclude="tensorboard")
-                    if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
-                        self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
-                        self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
-                    self.logger.record("time/fps", fps)
-                    self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
-                    self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
-                    self.logger.dump(step=self.num_timesteps)
+        #         # Display training infos
+        #         if log_interval is not None and iteration % log_interval == 0:
+        #             time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
+        #             fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
+        #             self.logger.record("time/iterations", iteration, exclude="tensorboard")
+        #             if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
+        #                 self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
+        #                 self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
+        #             self.logger.record("time/fps", fps)
+        #             self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
+        #             self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+        #             self.logger.dump(step=self.num_timesteps)
 
-                self.train()
+        #         self.train()
 
-            callback.on_training_end()
+        #     callback.on_training_end()
 
-            return self
-        else:
-            raise ValueError('Should not call this')
+        #     return self
+        # else:
+        #     raise ValueError('Should not call this')
+        
+        return super(RecurrentPPO_Dec, self).learn(
+            total_timesteps=total_timesteps,
+            callback=callback,
+            log_interval=log_interval,
+            eval_env=eval_env,
+            eval_freq=eval_freq,
+            n_eval_episodes=n_eval_episodes,
+            tb_log_name=tb_log_name,
+            eval_log_path=eval_log_path,
+            reset_num_timesteps=reset_num_timesteps,
+            **kwargs
+        )
 
 
 class RecurrentDec_Train():
@@ -606,11 +627,11 @@ class RecurrentDec_Train():
         if self.assistive_gym:
             self.agents = ['robot', 'human']
             self.models = {agent_id: RecurrentPPO_Dec(RecurrentActorCriticPolicy_Dec, self.env, agent_id=agent_id,
-                                                      verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+                                                      verbose=1, learning_rate=3e-3, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
         else:
             self.agents = list(range(self.env.n_agents))
             self.models = {agent_id: RecurrentPPO_Dec(RecurrentActorCriticPolicy_Dec, self.env, agent_id=agent_id,
-                                                      verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+                                                      verbose=1, learning_rate=3e-3, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
 
     def train(self, epochs=10, n_steps=2048, path=os.getcwd()):
         self.env.seed(int(time.time()))

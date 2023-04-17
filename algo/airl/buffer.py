@@ -2,8 +2,17 @@ import torch
 
 class Buffers_AIRL(object):
     def __init__(self, 
+                 batch_size,
+                 agents,
+                 local_observation_shape,
+                 local_action_shape,
+                 device,                 
                  buffer_size: int):
-
+        self.batch_size=batch_size
+        self.local_observation_shape = local_observation_shape
+        self.local_action_shape = local_action_shape
+        self.device = device
+        self.agents = agents
         self.policy_buffer = {
             'state': {
                 agent_id: torch.zeros(size=(buffer_size, self.local_observation_shape[agent_id]), device=self.device)
