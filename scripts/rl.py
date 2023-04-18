@@ -48,15 +48,22 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=321, help='Seed for random number gen')
     parser.add_argument('--load_existing', action='store_true', default=False)
     parser.add_argument('--model-path', type=str, default=f'{PACKAGE_PATH}/models/')
-    parser.add_argument('--test', action='store_true', default=False)
+    parser.add_argument('--test', action='store_true', default=True)
     args = parser.parse_args()
 
     env_id = args.env
     save_env_id = env_id.replace(":", "_")
+    save_env_id = f"{save_env_id}_recurrent_{args.recurrent}"
     
     if args.recurrent:
         r_ppo = RecurrentDec_Train(env_id, seed= args.seed)
-        r_ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+        if not args.test:
+            if args.load_existing:
+                r_ppo.load(args.model_path + f'{save_env_id}')
+            r_ppo.train(epochs=args.training_epochs, path=f'{PACKAGE_PATH}/models/{save_env_id}')
+            r_ppo.save(path=f'{PACKAGE_PATH}/models/{save_env_id}')
+        else:
+            r_ppo.test(load_model=True, load_path=f'{PACKAGE_PATH}/models/{save_env_id}',env_id=env_id)
     else:
         ppo = Dec_Train(env_id, seed = args.seed)
 

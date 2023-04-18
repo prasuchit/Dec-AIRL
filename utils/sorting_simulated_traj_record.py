@@ -58,15 +58,47 @@ if not failure_traj:
 else:
     obs = env.failure_reset()
 
-states_rollout = []
-next_states_rollout = []
-actions_rollout = []
-rewards_rollout = []
-dones_rollout = []
-infos_rollout = []
+# states_rollout = []
+# next_states_rollout = []
+# actions_rollout = []
+# rewards_rollout = []
+# dones_rollout = []
+# infos_rollout = []
 
 length_stats = []
 reward_stats = []
+
+local_observation_shape = {
+    agent_id: env.observation_space[agent_id].shape[0]
+    for agent_id in range(env.n_agents)
+}
+local_action_shape = {
+    agent_id: 1
+    for agent_id in range(env.n_agents)
+}
+
+expert_buffer = {
+            'state': {
+                agent_id: torch.zeros(size=(total_timesteps, local_observation_shape[agent_id]))
+                for agent_id in range(env.n_agents)
+            },
+            'action': {
+                agent_id: torch.zeros(size=(total_timesteps, local_action_shape[agent_id]))
+                for agent_id in range(env.n_agents)
+            },
+            'next_state': {
+                agent_id: torch.zeros(size=(total_timesteps, local_observation_shape[agent_id]))
+                for agent_id in range(env.n_agents)
+            },
+            'reward': {
+                agent_id: torch.zeros(total_timesteps)
+                for agent_id in range(env.n_agents)
+            },
+            'done': {
+                agent_id: torch.zeros(total_timesteps)
+                for agent_id in range(env.n_agents)
+            }
+        }
 
 length = 0
 reward = 0
@@ -99,7 +131,7 @@ for step in tqdm(range(total_timesteps)):
             actions_h = torch.tensor(3) # Inspect
         elif oloc_h == eefloc_h == 2 and pred_h == 2:   # Infront, good
             actions_h = torch.tensor(4) # Placeonconv
-        elif oloc_h == eefloc_h == 3 and pred_h == 1:   # Athome, bad
+        elif oloc_h == eefloc_h == 3 and pred_h == 1:   # Athomexpert_buffer['action'][agent_id][step] = actions[agent_id]e, bad
             actions_h = torch.tensor(5) # Placeinbin
         elif oloc_h == eefloc_h == 2 and pred_h == 1:   # Infront, bad
             actions_h = torch.tensor(5) # Placeinbin
@@ -137,17 +169,23 @@ for step in tqdm(range(total_timesteps)):
 
     new_obs, rewards, dones, infos = env.step(actions, verbose=0)
     # print(rewards, actions, obs)
-    rewards = sum(rewards) / 2
-    dones = all(dones)
+    # rewards = sum(rewards) / 2
+    # dones = all(dones)    
+    # states_rollout.append(obs)
+    # next_states_rollout.append(new_obs)
+    # actions_rollout.append(actions)
+    # rewards_rollout.append(rewards)
+    # dones_rollout.append([dones])
+    # infos_rollout.append(infos)
+    
+    for agent_id in range(env.n_agents):
+        expert_buffer['state'][agent_id][step] = torch.as_tensor(obs[agent_id])
+        expert_buffer['action'][agent_id][step] = torch.as_tensor(actions[agent_id])
+        expert_buffer['next_state'][agent_id][step] = torch.as_tensor(new_obs[agent_id])
+        expert_buffer['reward'][agent_id][step] = torch.as_tensor(rewards[agent_id])
+        expert_buffer['done'][agent_id][step] = torch.as_tensor(dones[agent_id]) 
 
-    states_rollout.append(obs)
-    next_states_rollout.append(new_obs)
-    actions_rollout.append(actions)
-    rewards_rollout.append(rewards)
-    dones_rollout.append([dones])
-    infos_rollout.append(infos)
-
-    if dones:
+    if all(dones):
         if not failure_traj:
             obs = env.reset()
         else:
@@ -162,26 +200,26 @@ for step in tqdm(range(total_timesteps)):
         obs = new_obs
 
         length += 1
-        reward += rewards
+        reward += rewards[0]
         
-states_rollout = torch.tensor(states_rollout).float()
-next_states_rollout = torch.tensor(next_states_rollout).float()
-actions_rollout = torch.tensor(actions_rollout).float()
-rewards_rollout = torch.tensor(rewards_rollout).float()
-dones_rollout = torch.tensor(dones_rollout).float()
+# states_rollout = torch.tensor(states_rollout).float()
+# next_states_rollout = torch.tensor(next_states_rollout).float()
+# actions_rollout = torch.tensor(actions_rollout).float()
+# rewards_rollout = torch.tensor(rewards_rollout).float()
+# dones_rollout = torch.tensor(dones_rollout).float()
 
-trajectories = {
-'state': states_rollout,
-'action': actions_rollout,
-'reward': rewards_rollout,
-'done': dones_rollout,
-'next_state': next_states_rollout
-}
+# trajectories = {
+# 'state': states_rollout,
+# 'action': actions_rollout,
+# 'reward': rewards_rollout,
+# 'done': dones_rollout,
+# 'next_state': next_states_rollout
+# }
 
 save_env_id = env_id.replace(":", "_")
 save_path = f'{PACKAGE_PATH}/buffers/{save_env_id}'
 if not os.path.isdir(save_path):
     os.makedirs(save_path)
-torch.save(trajectories, f'{save_path}/trajectory.pt')    
+torch.save(expert_buffer, f'{save_path}/trajectory.pt')    
 
 print(f'Collect Episodes: {len(length_stats)} | Avg Length: {round(np.mean(length_stats), 2)} | Avg Reward: {round(np.mean(reward_stats), 2)}')

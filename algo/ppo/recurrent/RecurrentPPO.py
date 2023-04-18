@@ -351,7 +351,8 @@ class RecurrentPPO_Dec(PPO_Dec):
 
                 # Normalize advantage
                 advantages = rollout_data.advantages
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+                if self.normalize_advantage:
+                    advantages = (advantages - advantages[mask].mean()) / (advantages[mask].std() + 1e-8)
 
                 # ratio between old and new policy, should be one at the first iteration
                 ratio = th.exp(log_prob - rollout_data.old_log_prob)
@@ -359,11 +360,11 @@ class RecurrentPPO_Dec(PPO_Dec):
                 # clipped surrogate loss
                 policy_loss_1 = advantages * ratio
                 policy_loss_2 = advantages * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
-                policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()
+                policy_loss = -th.mean(th.min(policy_loss_1, policy_loss_2)[mask])
 
                 # Logging
                 pg_losses.append(policy_loss.item())
-                clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
+                clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()[mask]).item()
                 clip_fractions.append(clip_fraction)
 
                 if self.clip_range_vf is None:
@@ -376,15 +377,18 @@ class RecurrentPPO_Dec(PPO_Dec):
                         values - rollout_data.old_values, -clip_range_vf, clip_range_vf
                     )
                 # Value loss using the TD(gae_lambda) target
-                value_loss = F.mse_loss(rollout_data.returns, values_pred)
+                # Mask padded sequences
+                value_loss = th.mean(((rollout_data.returns - values_pred) ** 2)[mask])
+                # value_loss = F.mse_loss(rollout_data.returns[mask], values_pred[mask])
+
                 value_losses.append(value_loss.item())
 
                 # Entropy loss favor exploration
                 if entropy is None:
                     # Approximate entropy when no analytical form
-                    entropy_loss = -th.mean(-log_prob)
+                    entropy_loss = -th.mean(-log_prob[mask])
                 else:
-                    entropy_loss = -th.mean(entropy)
+                    entropy_loss = -th.mean(entropy[mask])
 
                 entropy_losses.append(entropy_loss.item())
 
@@ -396,14 +400,13 @@ class RecurrentPPO_Dec(PPO_Dec):
                 # and Schulman blog: http://joschu.net/blog/kl-approx.html
                 with th.no_grad():
                     log_ratio = log_prob - rollout_data.old_log_prob
-                    approx_kl_div = th.mean((th.exp(log_ratio) - 1) - log_ratio).cpu().numpy()
+                    approx_kl_div = th.mean(((th.exp(log_ratio) - 1) - log_ratio)[mask]).cpu().numpy()
                     approx_kl_divs.append(approx_kl_div)
 
                 if self.target_kl is not None and approx_kl_div > 1.5 * self.target_kl:
                     continue_training = False
                     if self.verbose >= 1:
-                        print(
-                            f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}")
+                        print(f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}")
                     break
 
                 # Optimization step
@@ -627,11 +630,11 @@ class RecurrentDec_Train():
         if self.assistive_gym:
             self.agents = ['robot', 'human']
             self.models = {agent_id: RecurrentPPO_Dec(RecurrentActorCriticPolicy_Dec, self.env, agent_id=agent_id,
-                                                      verbose=1, learning_rate=3e-3, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+                                                      verbose=1, learning_rate=3e-4, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
         else:
             self.agents = list(range(self.env.n_agents))
             self.models = {agent_id: RecurrentPPO_Dec(RecurrentActorCriticPolicy_Dec, self.env, agent_id=agent_id,
-                                                      verbose=1, learning_rate=3e-3, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+                                                      verbose=1, learning_rate=3e-4, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
 
     def train(self, epochs=10, n_steps=2048, path=os.getcwd()):
         self.env.seed(int(time.time()))
@@ -747,6 +750,9 @@ class RecurrentDec_Train():
             length = 0
             # self.env.seed(int(time.time()))
             obs = self.env_test.reset()
+            lstm_states = {agent_id: self.models[agent_id]._last_lstm_states for agent_id in self.agents}
+            # Episode start signals are used to reset the lstm states
+            episode_starts = th.ones((self.n_envs,))
             while not dones:
                 with th.no_grad():
                     actions = {agent_id: None for agent_id in self.agents}
@@ -754,8 +760,7 @@ class RecurrentDec_Train():
                         local_obs = obs[agent_id]
                         global_obs = np.concatenate(
                             [obs[agent_id] for agent_id in self.agents])
-                        action, value, log_prob = self.models[agent_id].policy.forward(
-                            local_obs, global_obs)
+                        action, _, _, _ = self.models[agent_id].policy.forward(local_obs, global_obs, lstm_states[agent_id], episode_starts)
                         actions[agent_id] = action.squeeze().cpu().numpy()
 
                 if self.assistive_gym:

@@ -46,6 +46,8 @@ from algo.ppo.ActorCritic import *
 from algo.ppo.ppo import *
 from algo.airl.disc import AIRLDiscrimMultiAgent
 from algo.airl.buffer import Buffers_AIRL
+from algo.ppo.recurrent.RecurrentActorCritic import RecurrentActorCriticPolicy_Dec
+from algo.ppo.recurrent.RecurrentPPO import RecurrentPPO_Dec
 from utils import get_assistive_gym_envs_list
 # import shutup; shutup.please()
 
@@ -57,7 +59,7 @@ class AIRL(object):
                  batch_size=128, lr_actor=3e-4, lr_disc=3e-4,
                  units_disc_r=(64, 64), units_disc_v=(64, 64),
                  epoch_actor=10, epoch_disc=10, clip_eps=0.2, gae_lambda=0.97,
-                 ent_coef=0.0, max_grad_norm=0.5, path = os.getcwd()):
+                 ent_coef=0.0, max_grad_norm=0.5, path = os.getcwd(), recurrent=False):
 
         self.seed = seed
 
@@ -91,7 +93,11 @@ class AIRL(object):
         else:
             self.agents = list(range(self.env.n_agents))
 
-        self.actors = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+        if not recurrent:
+            self.actors = {agent_id: PPO_Dec(ActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
+        else:   
+            '''NOTE: Integration of recurrent PPO with Dec-AIRL is currently incomplete.'''
+            self.actors = {agent_id: RecurrentPPO_Dec(RecurrentActorCriticPolicy_Dec, self.env, agent_id=agent_id, verbose=1, custom_rollout=True, device=self.device, seed=self.seed) for agent_id in self.agents}
         self.path = path
 
         # Discriminator.
@@ -146,13 +152,14 @@ class AIRL(object):
             self.global_action_shape = self.env.action_space[0].n
             self.action_continuous = False
 
-        self.buffers_exp = buffers_exp
+        # self.buffers_exp = buffers_exp
         self.buffers = Buffers_AIRL(buffer_size=self.n_steps, 
                                     batch_size=self.batch_size,
                                     agents=self.agents, 
                                     device=self.device,
                                     local_observation_shape=self.local_observation_shape,
-                                    local_action_shape=self.local_action_shape)
+                                    local_action_shape=self.local_action_shape,
+                                    expert_buffer = buffers_exp)
         
         self.best_reward = - float('inf')
         # self.load_models(load_existing, trainpath)
@@ -161,9 +168,9 @@ class AIRL(object):
         for _ in range(self.epoch_disc):
             self.learning_steps_disc += 1
 
-            states_policy, actions_policy, next_states_policy, _, dones_policy, _, log_probs_policy = self.buffers.sample(self.buffers.policy_buffer, expert=False)
+            states_policy, actions_policy, next_states_policy, _, dones_policy, _, log_probs_policy = self.buffers.sample(expert=False)
 
-            states_exp, actions_exp, next_states_exp, _, dones_exp = self.buffers.sample(self.buffers_exp, expert=True)
+            states_exp, actions_exp, next_states_exp, _, dones_exp = self.buffers.sample(expert=True)
             
             log_probs_exp = {}
             if not self.action_continuous:
@@ -198,7 +205,7 @@ class AIRL(object):
                 states_exp, global_actions_exp, dones_exp, log_probs_exp, next_states_exp, epoch_ratio
             )
 
-        states, actions, next_states, _, dones, values, log_probs, infos = self.buffers.get(self.buffers.policy_buffer)  
+        states, actions, next_states, _, dones, values, log_probs, infos = self.buffers.get()  
         if self.action_continuous:      
             global_actions = torch.cat([actions[i] for i in self.agents], dim=1).to(self.device)
         else:
@@ -273,7 +280,7 @@ class AIRL(object):
 
             # new_obs, rewards, dones, infos = self.env.step(actions)
 
-            self.buffers.add(self.buffers.policy_buffer, obs, actions, new_obs, rewards, dones, values, log_probs, infos)
+            self.buffers.add(obs, actions, new_obs, rewards, dones, values, log_probs, infos)
 
             rewards = sum([rewards[i] for i in self.agents]) / 2
             dones = any([dones[i] for i in self.agents])
